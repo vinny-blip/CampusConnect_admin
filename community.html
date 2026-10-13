@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Community · CampusConnect</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head>
+<body class="dash"><div id="app"></div>
+<script type="module">
+  import { createApp } from './js/app.js';
+  import { FeedView } from './js/views/FeedView.js';
+  import { FeedController } from './js/controllers/FeedController.js';
+  new FeedController('community', createApp(), new FeedView('community'));
+</script></body></html>
