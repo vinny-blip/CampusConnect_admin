@@ -1,0 +1,7 @@
+Options -Indexes
+RewriteEngine On
+
+RewriteRule ^(?:app|config|storage)(?:/|$) - [F,L,NC]
+RewriteRule ^public/ - [F,L,NC]
+RewriteRule ^$ public/index.php [END]
+RewriteRule ^(.+)$ public/$1 [END]
