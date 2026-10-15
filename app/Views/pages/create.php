@@ -8,7 +8,7 @@
   </select>
   <label for="title">Title</label><input id="title" name="title" maxlength="140" autocomplete="off">
   <label for="body">Text (optional)</label><textarea id="body" name="body" rows="5"></textarea>
-  <label for="image">Image (optional, under 400 KB)</label><input id="image" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+  <label for="image">Image (optional)</label><input id="image" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
   <button class="button primary" type="submit">Post</button>
   <a class="button" href="home.php">Cancel</a>
 </form>

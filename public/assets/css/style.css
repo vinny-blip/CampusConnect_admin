@@ -224,7 +224,7 @@ button{font:inherit;cursor:pointer}
 .queue-title-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
 .queue-heading h2{margin:18px 0 6px}
 .queue-heading .sub{margin:0 0 14px}
-.ai-moderation-form{flex:none;margin:0}
+.ai-moderation-form{flex:none;align-self:flex-start;margin:28px 0 0}
 .ai-moderation-toggle{min-width:244px;min-height:86px;padding:12px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:0;border-radius:48px;background:#fff;color:#171717;font:inherit;font-size:.85rem;box-shadow:0 5px 12px rgba(0,0,0,.22);transition:transform .15s,box-shadow .15s}
 .ai-moderation-toggle:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(0,0,0,.24)}
 .ai-switch{position:relative;display:block;width:78px;height:28px;border-radius:20px;background:#6e6262;transition:background .18s}

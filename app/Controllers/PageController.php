@@ -323,8 +323,8 @@ final class PageController
         $image = '';
         if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
             $file = $_FILES['image'];
-            if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] > 400000) {
-                $this->flash('That image is over 400 KB or could not be uploaded.', 'error');
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                $this->flash('The image could not be uploaded. Check your server upload limits and try again.', 'error');
                 return;
             }
             $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
@@ -333,7 +333,12 @@ final class PageController
                 $this->flash('Choose a valid JPG, PNG, GIF, or WebP image.', 'error');
                 return;
             }
-            $image = 'data:' . $mime . ';base64,' . base64_encode((string)file_get_contents($file['tmp_name']));
+            $contents = file_get_contents($file['tmp_name']);
+            if ($contents === false) {
+                $this->flash('The image could not be read. Please try uploading it again.', 'error');
+                return;
+            }
+            $image = 'data:' . $mime . ';base64,' . base64_encode($contents);
         }
         $postData = $_POST;
         $postData['image'] = $image;
