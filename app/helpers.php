@@ -46,8 +46,7 @@ function flash_message(?array $flash): void
 
 function post_action(string $csrf, string $action, int $postId, string $label, string $class = 'chip', bool $disabled = false): void
 {
-    echo '<form class="inline-action" method="post"><input type="hidden" name="csrf_token" value="'
-        . h($csrf) . '"><input type="hidden" name="action" value="' . h($action)
+    echo '<form class="inline-action" method="post">' . $csrf . '<input type="hidden" name="action" value="' . h($action)
         . '"><input type="hidden" name="post_id" value="' . $postId
         . '"><button class="' . h($class) . '" type="submit"' . ($disabled ? ' disabled' : '') . '>'
         . h($label) . '</button></form>';

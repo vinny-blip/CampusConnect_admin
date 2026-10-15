@@ -6,7 +6,7 @@
   <title><?= $page === 'login' ? 'Login' : 'Register' ?> · CampusConnect</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=<?= (int)filemtime(dirname(__DIR__, 2) . '/public/assets/css/style.css') ?>">
 </head>
 <body class="auth">
 <main class="auth-card">

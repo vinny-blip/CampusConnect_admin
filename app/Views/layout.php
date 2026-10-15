@@ -6,7 +6,7 @@
   <title><?= h(ucfirst($page)) ?> · CampusConnect</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=<?= (int)filemtime(dirname(__DIR__, 2) . '/public/assets/css/style.css') ?>">
 </head>
 <body class="dash">
 <div id="app">
@@ -31,7 +31,7 @@
         <h4><a class="<?= $page === 'communities' ? 'on' : '' ?>" href="communities.php">Moderating</a></h4>
         <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico" aria-hidden="true">▣</span>Queues</a>
         <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico" aria-hidden="true">✉</span>Mod Mail</a>
-        <a class="<?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico" aria-hidden="true">●</span>r/ designatmobbin</a>
+        <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico" aria-hidden="true">●</span><span>r/designatmobbin</span></a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>
           <input type="hidden" name="action" value="logout">

@@ -26,7 +26,7 @@ button{font:inherit;cursor:pointer}
 .dash{height:100%;padding:24px;display:flex}
 .shell{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--shell);border-radius:40px;padding:0 24px 24px}
 .topbar{display:flex;align-items:center;gap:16px;padding:20px 12px}
-.brand{font-size:.8rem;width:160px}
+.brand{font-size:1rem;width:200px}
 .search{flex:1;max-width:360px;margin:0 auto;padding:11px 20px;border:0;border-radius:999px;background:#f7f7f9;font:inherit;font-size:.8rem}
 .top-actions{display:flex;align-items:center;gap:16px;font-size:.85rem}
 .top-actions button{background:none;border:0;color:var(--ink)}
@@ -36,6 +36,8 @@ button{font:inherit;cursor:pointer}
 .sidebar{width:190px;background:var(--panel);padding:16px 14px;display:flex;flex-direction:column;gap:6px;font-size:.85rem;overflow-y:auto}
 .sidebar a{color:var(--ink);text-decoration:none;padding:6px 8px;border-radius:6px}
 .sidebar a:hover,.sidebar a.on{background:#e3e3e8}
+.sidebar .community-nav{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:.78rem}
+.sidebar .community-nav .ico{flex:none;margin-right:0}
 .sidebar h4{margin:24px 8px 4px;font-size:.75rem;font-weight:500}
 .main{flex:1;min-width:0;background:#efefef;display:flex;flex-direction:column;min-height:0}
 .tabs{display:flex;gap:44px;padding:18px 36px 0;font-size:.8rem}
@@ -77,11 +79,11 @@ button{font:inherit;cursor:pointer}
  .queue{margin:0 8px 8px 14px}
  .post{grid-template-columns:1fr auto}.thumb{display:none}
 }
-.logo{display:block;width:120px;max-width:60%;margin:0 auto 6px}
+.logo{display:block;width:190px;max-width:80%;margin:0 auto 6px}
 /* ---------- shared shell (all pages after login) ---------- */
 .dash #app{display:flex;flex:1;min-width:0;min-height:0}
 .brand{display:flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;font-weight:600}
-.brand img{width:22px;height:22px;object-fit:contain}
+.brand img{width:32px;height:32px;object-fit:contain}
 .searchform{flex:1;max-width:360px;margin:0 auto}
 .searchform .search{display:block;width:100%;max-width:none;margin:0}
 .top-actions a{color:var(--ink);text-decoration:none}
@@ -91,7 +93,7 @@ button{font:inherit;cursor:pointer}
 .avatar{color:var(--ink);text-decoration:none}
 .avatar.sm{width:22px;height:22px;font-size:.6rem}
 .avatar.big{width:56px;height:56px;font-size:1rem}
-.sidebar a .ico{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border:1.5px solid var(--ink);border-radius:50%;font-size:.7rem}
+.sidebar a .ico{display:inline-grid;place-items:center;width:30px;height:30px;margin-right:8px;border:1.5px solid var(--ink);border-radius:50%;font-size:.95rem}
 .sidebar h4 a{padding:0}
 .sidebar h4 a.on{font-weight:700}
 .logout{margin-top:auto;background:none;border:0;text-align:left;padding:6px 8px;color:var(--ink);font-size:.85rem;border-radius:6px}
@@ -208,7 +210,7 @@ button{font:inherit;cursor:pointer}
 .logout-form .logout{width:100%;margin-top:0}
 .filter-link{padding:4px 0;color:var(--ink)!important;text-decoration:none;border-bottom:2px solid transparent}
 .filter-link.on{border-color:var(--ink);font-weight:600}
-.queue-search{display:flex;gap:8px;align-items:center;margin-left:auto}
+.queue-search{display:flex;gap:8px;align-items:center;margin:0}
 .queue-search .localsearch{margin:0}
 .queue-search .button{padding:5px 12px}
 .community-menu{position:relative}
@@ -221,11 +223,18 @@ button{font:inherit;cursor:pointer}
 .role-info{margin:28px 0;padding:14px 18px;background:#fff;border-radius:12px;font-size:.8rem}
 .role-info p{margin:6px 0}
 .queue-heading{display:block}
+.page .queue-filter-bar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center}
+.queue-tabs{display:flex;grid-column:1;gap:20px;min-width:0}
+.page .queue-filter-bar .queue-search{position:static;grid-column:2;justify-self:center;transform:none}
+.page .queue-filter-bar .queue-status{grid-column:3;justify-self:end}
 .queue-title-row{display:flex;align-items:center;justify-content:space-between;gap:20px}
 .queue-heading h2{margin:18px 0 6px}
 .queue-heading .sub{margin:0 0 14px}
-.ai-moderation-form{flex:none;align-self:flex-start;margin:28px 0 0}
-.ai-moderation-toggle{min-width:244px;min-height:86px;padding:12px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:0;border-radius:48px;background:#fff;color:#171717;font:inherit;font-size:.85rem;box-shadow:0 5px 12px rgba(0,0,0,.22);transition:transform .15s,box-shadow .15s}
+.queue-status{display:flex;flex:none;flex-direction:column;align-items:flex-end;gap:6px}
+.queue-status .count{margin-left:0}
+.ai-moderation-form{flex:none;margin:0}
+.ai-moderation-toggle{width:180px;min-width:0;min-height:76px;padding:10px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:0;border-radius:48px;background:#fff;color:#171717;font:inherit;font-size:.85rem;box-shadow:0 5px 12px rgba(0,0,0,.22);transition:transform .15s,box-shadow .15s}
+.ai-moderation-toggle>span:first-child{font-size:.6rem;white-space:nowrap}
 .ai-moderation-toggle:hover{transform:translateY(-1px);box-shadow:0 7px 14px rgba(0,0,0,.24)}
 .ai-switch{position:relative;display:block;width:78px;height:28px;border-radius:20px;background:#6e6262;transition:background .18s}
 .ai-switch span{position:absolute;top:1px;left:1px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.32);transition:transform .18s}
@@ -241,8 +250,13 @@ button{font:inherit;cursor:pointer}
 .form.inline input{min-width:0}
 @media(max-width:800px){
  .queue-title-row{align-items:flex-start;gap:10px}
- .ai-moderation-toggle{min-width:220px;min-height:72px}
- .queue-search{margin-left:0}
+ .ai-moderation-toggle{width:180px;min-width:0;min-height:72px}
  .form.inline{flex-wrap:wrap}
  .form.inline input{flex:1 1 140px}
+}
+@media(max-width:1100px){
+ .page .queue-filter-bar{grid-template-columns:minmax(0,1fr) auto;row-gap:12px}
+ .queue-tabs{grid-column:1/-1}
+ .page .queue-filter-bar .queue-search{grid-column:1;grid-row:2;justify-self:center;transform:none}
+ .page .queue-filter-bar .queue-status{grid-column:2;grid-row:2;justify-self:end;margin-left:0}
 }

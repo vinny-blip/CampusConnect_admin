@@ -1,7 +1,23 @@
 <div class="queue-heading">
   <div class="queue-title">
     <div class="queue-title-row">
-    <h2>Queues</h2>
+      <h2>Queues</h2>
+    </div>
+    <p class="sub">Open each post and check it before you approve or remove it. Reported posts are kept in their own list.</p>
+  </div>
+</div>
+<p class="sub ai-moderation-note">This toggle saves your preference only. Posts still require manual review.</p>
+<nav class="filters queue-filter-bar" aria-label="Moderation queues">
+  <div class="queue-tabs">
+    <a class="filter-link <?= $kind === 'approve' ? 'on' : '' ?>" href="queues.php">To approve (<?= (int)$counts['toApprove'] ?>)</a>
+    <a class="filter-link <?= $kind === 'reported' ? 'on' : '' ?>" href="queues.php?tab=reported">Reported (<?= (int)$counts['reported'] ?>)</a>
+  </div>
+  <form class="queue-search" method="get" action="queues.php">
+    <?php if ($kind === 'reported'): ?><input type="hidden" name="tab" value="reported"><?php endif; ?>
+    <input class="localsearch" type="search" name="q" placeholder="Filter this queue" value="<?= h($query) ?>" aria-label="Filter this queue">
+    <button class="button" type="submit">Search</button>
+  </form>
+  <div class="queue-status">
     <form class="ai-moderation-form" method="post">
       <?= $csrf ?>
       <input type="hidden" name="action" value="toggle-ai-moderation">
@@ -11,20 +27,8 @@
         <span class="ai-switch" aria-hidden="true"><span></span></span>
       </button>
     </form>
-    </div>
-    <p class="sub">Open each post and check it before you approve or remove it. Reported posts are kept in their own list.</p>
+    <span class="count"><?= count($posts) ?> shown</span>
   </div>
-</div>
-<p class="sub ai-moderation-note">This toggle saves your preference only. Posts still require manual review.</p>
-<nav class="filters" aria-label="Moderation queues">
-  <a class="filter-link <?= $kind === 'approve' ? 'on' : '' ?>" href="queues.php">To approve (<?= (int)$counts['toApprove'] ?>)</a>
-  <a class="filter-link <?= $kind === 'reported' ? 'on' : '' ?>" href="queues.php?tab=reported">Reported (<?= (int)$counts['reported'] ?>)</a>
-  <form class="queue-search" method="get" action="queues.php">
-    <?php if ($kind === 'reported'): ?><input type="hidden" name="tab" value="reported"><?php endif; ?>
-    <input class="localsearch" type="search" name="q" placeholder="Filter this queue" value="<?= h($query) ?>" aria-label="Filter this queue">
-    <button class="button" type="submit">Search</button>
-  </form>
-  <span class="count"><?= count($posts) ?> shown</span>
 </nav>
 <section class="queue" aria-live="polite">
 <?php if ($posts): ?>
