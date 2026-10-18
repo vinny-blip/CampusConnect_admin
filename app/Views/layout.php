@@ -32,6 +32,8 @@
         <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico" aria-hidden="true">▣</span>Queues</a>
         <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico" aria-hidden="true">✉</span>Mod Mail</a>
         <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico" aria-hidden="true">●</span><span>r/designatmobbin</span></a>
+        <a class="about-nav <?= $page === 'about' ? 'on' : '' ?>" href="about.php"><span class="ico" aria-hidden="true">ⓘ</span>About Us</a>
+        <a class="<?= $page === 'faqs' ? 'on' : '' ?>" href="faqs.php"><span class="ico" aria-hidden="true">?</span>FAQs</a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>
           <input type="hidden" name="action" value="logout">

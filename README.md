@@ -22,6 +22,8 @@ The demo account is `mod@campus.edu.ph` / `mod12345`. The dashboard and demo log
 | Queues | `queues.php` (`dashboard.php` forwards here) |
 | Mod Mail / Messages | `modmail.php`, `messages.php` |
 | Communities | `designatmobbin.php`, `community.php?c=slug`, `communities.php` |
+| About Us | `about.php` |
+| FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
 | Overview, Posts, Comments, Saved, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `saved.php`, `restricted.php`, `reported.php` |
 | Create Post, Notifications, Profile, Search | `create.php`, `notifications.php`, `profile.php`, `search.php` |
