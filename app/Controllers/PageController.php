@@ -88,6 +88,11 @@ final class PageController
             $this->initializeModels((int)$this->user['id']);
         }
 
+        if ($this->page === 'restricted' && ($this->user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            exit('Only the admin can manage moderator restrictions.');
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->handlePost();
         }
@@ -132,7 +137,7 @@ final class PageController
         $this->posts = new PostModel($this->db, $userId);
         $this->inbox = new InboxModel($this->db, $userId);
         $this->notifications = new NotificationModel($this->db, $userId);
-        $this->restricted = new RestrictedModel($this->db, $userId);
+        $this->restricted = new RestrictedModel($this->db);
         $this->aiModeration = new AiModerationModel($this->db, $userId);
     }
 
@@ -211,6 +216,12 @@ final class PageController
         if (!in_array($action, $allowedActions, true)) {
             http_response_code(400);
             exit('Unsupported form action.');
+        }
+
+        if (in_array($action, ['create-post', 'comment'], true)
+            && $this->restricted->isRestricted((int)$this->user['id'])) {
+            $this->flash('Your account is restricted from posting and commenting.', 'error');
+            $this->redirect($this->returnUrl());
         }
 
         switch ($this->page) {
@@ -408,14 +419,14 @@ final class PageController
     {
         if ($action === 'restrict') {
             $error = $this->restricted->add(
-                (string)($_POST['username'] ?? ''),
-                (string)($_POST['reason'] ?? '')
+                (string)($_POST['email'] ?? ''),
+                (string)($_POST['reason'] ?? ''),
+                (int)$this->user['id']
             );
-            $this->flash($error ?? trim((string)$_POST['username']) . ' restricted.', $error === null ? 'success' : 'error');
+            $this->flash($error ?? 'Moderator restricted.', $error === null ? 'success' : 'error');
         } elseif ($action === 'unrestrict') {
-            $username = (string)($_POST['username'] ?? '');
-            $this->restricted->remove($username);
-            $this->flash("{$username} can post again.");
+            $this->restricted->remove((int)($_POST['user_id'] ?? 0));
+            $this->flash('Moderator can post and comment again.');
         }
     }
 

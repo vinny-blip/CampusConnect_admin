@@ -50,6 +50,7 @@
         ?>
           <nav class="tabs" aria-label="Moderation">
             <?php foreach ($tabPages as $tabPage => $tabLabel): ?>
+              <?php if ($tabPage === 'restricted' && ($user['role'] ?? '') !== 'admin') continue; ?>
               <?php if ($page === 'control' && !in_array($tabPage, ['overview', 'posts', 'comments', 'saved', 'reported'], true)) continue; ?>
               <?php if ($page === 'post' && !in_array($tabPage, ['overview', 'posts', 'reported'], true)) continue; ?>
               <a href="<?= h($tabPage) ?>.php" class="<?= ($page === $tabPage || ($page === 'post' && $tabPage === 'posts')) ? 'on' : '' ?>"><?= h($tabLabel) ?></a>

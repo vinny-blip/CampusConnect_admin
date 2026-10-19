@@ -3,8 +3,13 @@ declare(strict_types=1);
 
 final class UserModel
 {
+    private string $adminEmail;
+
     public function __construct(private PDO $db)
     {
+        $config = require dirname(__DIR__, 2) . '/config/database.php';
+        $this->adminEmail = mb_strtolower(trim((string)$config['admin_email']));
+
         $statement = $this->db->prepare('SELECT id FROM users WHERE email = ?');
         $statement->execute(['mod@campus.edu.ph']);
         if ($statement->fetchColumn() === false) {
@@ -22,7 +27,7 @@ final class UserModel
         $statement = $this->db->prepare('SELECT id, name, email FROM users WHERE id = ?');
         $statement->execute([$id]);
         $user = $statement->fetch();
-        return $user ?: null;
+        return $user ? $this->withRole($user) : null;
     }
 
     public function findByEmail(string $email): ?array
@@ -30,7 +35,7 @@ final class UserModel
         $statement = $this->db->prepare('SELECT id, name, email FROM users WHERE email = ?');
         $statement->execute([mb_strtolower(trim($email))]);
         $user = $statement->fetch();
-        return $user ?: null;
+        return $user ? $this->withRole($user) : null;
     }
 
     public function login(string $email, string $password): ?array
@@ -41,7 +46,7 @@ final class UserModel
         if (!$user || !password_verify($password, $user['password_hash'])) {
             return null;
         }
-        return ['id' => (int)$user['id'], 'name' => $user['name'], 'email' => $user['email']];
+        return $this->withRole($user);
     }
 
     public function register(array $data): array
@@ -85,5 +90,13 @@ final class UserModel
         $statement = $this->db->prepare('UPDATE users SET name = ? WHERE id = ?');
         $statement->execute([$name, $id]);
         return true;
+    }
+
+    private function withRole(array $user): array
+    {
+        $user['id'] = (int)$user['id'];
+        $user['role'] = mb_strtolower(trim((string)$user['email'])) === $this->adminEmail ? 'admin' : 'moderator';
+        unset($user['password_hash']);
+        return $user;
     }
 }

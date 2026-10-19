@@ -1,53 +1,68 @@
 <?php
 declare(strict_types=1);
 
-final class RestrictedModel extends StateModel
+final class RestrictedModel
 {
-    private const KEY = 'restricted';
+    private string $adminEmail;
 
-    private function all(): array
+    public function __construct(private PDO $db)
     {
-        return $this->load(self::KEY, static function (): array {
-            $now = (int)(microtime(true) * 1000);
-            return [
-                ['username' => 'anonymous7', 'reason' => "Repeated spam in IT'ers", 't' => $now - 4000 * 60000],
-                ['username' => 'anonymous19', 'reason' => 'Harassment in comments', 't' => $now - 9000 * 60000],
-                ['username' => 'anonymous33', 'reason' => 'Selling items without permission', 't' => $now - 15000 * 60000],
-            ];
-        });
+        $config = require dirname(__DIR__, 2) . '/config/database.php';
+        $this->adminEmail = mb_strtolower(trim((string)$config['admin_email']));
     }
 
     public function list(): array
     {
-        $items = $this->all();
-        usort($items, static fn($a, $b) => $b['t'] <=> $a['t']);
-        return $items;
+        $statement = $this->db->query(
+            'SELECT restrictions.user_id, users.name, users.email, restrictions.reason, restrictions.created_at AS t
+             FROM user_restrictions AS restrictions
+             INNER JOIN users ON users.id = restrictions.user_id
+             ORDER BY restrictions.created_at DESC'
+        );
+        return $statement->fetchAll();
     }
 
-    public function add(string $username, string $reason): ?string
+    public function isRestricted(int $userId): bool
     {
-        $username = trim($username);
+        $statement = $this->db->prepare('SELECT 1 FROM user_restrictions WHERE user_id = ?');
+        $statement->execute([$userId]);
+        return $statement->fetchColumn() !== false;
+    }
+
+    public function add(string $email, string $reason, int $adminId): ?string
+    {
+        $email = mb_strtolower(trim($email));
         $reason = trim($reason);
-        if ($username === '') {
-            return 'Enter a username to restrict.';
+        if ($email === '') {
+            return 'Enter the moderator account email to restrict.';
         }
         if ($reason === '') {
             return 'Add a reason so other moderators know why.';
         }
-        $all = $this->all();
-        foreach ($all as $item) {
-            if (mb_strtolower($item['username']) === mb_strtolower($username)) {
-                return "{$username} is already restricted.";
-            }
+        if ($email === $this->adminEmail) {
+            return 'The admin account cannot be restricted here.';
         }
-        $all[] = ['username' => $username, 'reason' => $reason, 't' => (int)(microtime(true) * 1000)];
-        $this->save(self::KEY, $all);
+
+        $target = $this->db->prepare('SELECT id FROM users WHERE LOWER(email) = ?');
+        $target->execute([$email]);
+        $userId = $target->fetchColumn();
+        if ($userId === false) {
+            return 'No moderator account was found with that email.';
+        }
+        if ($this->isRestricted((int)$userId)) {
+            return 'That moderator is already restricted.';
+        }
+
+        $statement = $this->db->prepare(
+            'INSERT INTO user_restrictions (user_id, restricted_by, reason, created_at) VALUES (?, ?, ?, ?)'
+        );
+        $statement->execute([(int)$userId, $adminId, $reason, (int)(microtime(true) * 1000)]);
         return null;
     }
 
-    public function remove(string $username): void
+    public function remove(int $userId): void
     {
-        $all = array_values(array_filter($this->all(), static fn($item) => $item['username'] !== $username));
-        $this->save(self::KEY, $all);
+        $statement = $this->db->prepare('DELETE FROM user_restrictions WHERE user_id = ?');
+        $statement->execute([$userId]);
     }
 }

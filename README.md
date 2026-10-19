@@ -12,6 +12,8 @@ CampusConnect is a PHP MVC moderator dashboard that runs on XAMPP. It uses MySQL
 
 The demo account is `mod@campus.edu.ph` / `mod12345`. The dashboard and demo login both work without a MySQL server. Demo data is created the first time each account visits the app. Passwords are hashed; each account has its own app data.
 
+The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@usls.edu.ph`. That account must be registered and is the only account treated as an admin; other accounts are moderators. Only the admin can open the Restricted page, where restrictions are stored globally and prevent the selected moderator account from creating posts or comments. The app creates the restrictions table automatically for SQLite and MySQL; `config/database.sql` also defines it for fresh MySQL installs.
+
 ## Pages
 
 | Page | Route |

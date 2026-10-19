@@ -22,3 +22,13 @@ CREATE TABLE IF NOT EXISTS app_state (
   PRIMARY KEY (user_id, state_key),
   CONSTRAINT app_state_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS user_restrictions (
+  user_id BIGINT UNSIGNED NOT NULL,
+  restricted_by BIGINT UNSIGNED NOT NULL,
+  reason VARCHAR(500) NOT NULL,
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY (user_id),
+  CONSTRAINT user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
