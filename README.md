@@ -24,6 +24,8 @@ The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@u
 | Queues | `queues.php` (`dashboard.php` forwards here) |
 | Mod Mail / Messages | `modmail.php`, `messages.php` |
 | Communities | `designatmobbin.php`, `community.php?c=slug`, `communities.php` |
+| About Us | `about.php` |
+| FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
 | Overview, Posts, Comments, Saved, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `saved.php`, `restricted.php`, `reported.php` |
 | Create Post, Notifications, Profile, Search | `create.php`, `notifications.php`, `profile.php`, `search.php` |

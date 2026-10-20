@@ -41,6 +41,12 @@ switch ($page):
     case 'comments':
         require __DIR__ . '/pages/comments.php';
         break;
+    case 'about':
+        require __DIR__ . '/pages/about.php';
+        break;
+    case 'faqs':
+        require __DIR__ . '/pages/faqs.php';
+        break;
     default:
         echo '<h2>Page not found</h2>';
 endswitch;

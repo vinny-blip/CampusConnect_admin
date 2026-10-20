@@ -98,6 +98,9 @@ button{font:inherit;cursor:pointer}
 .sidebar h4 a.on{font-weight:700}
 .logout{margin-top:auto;background:none;border:0;text-align:left;padding:6px 8px;color:var(--ink);font-size:.85rem;border-radius:6px}
 .logout:hover{background:#e3e3e8}
+.sidebar .about-nav{margin-top:auto}
+.logout-form{margin-top:0}
+.logout-form .logout{margin-top:0}
 .main{overflow:hidden}
 .tabs a{color:var(--ink);text-decoration:none;padding-bottom:6px;border-bottom:2px solid transparent}
 .tabs a.on{border-color:var(--ink);font-weight:600}
@@ -222,6 +225,18 @@ button{font:inherit;cursor:pointer}
 .community-menu-items button{display:block;width:100%;padding:7px 0;background:none;border:0;text-align:left;font-size:.75rem;color:var(--ink)}
 .role-info{margin:28px 0;padding:14px 18px;background:#fff;border-radius:12px;font-size:.8rem}
 .role-info p{margin:6px 0}
+.about-page{max-width:820px;margin:0 auto;padding-bottom:20px}
+.about-intro,.about-section{margin:18px 0;padding:22px 24px;background:#fff;border-radius:14px}
+.about-intro h2{margin:0 0 8px;font-size:1.5rem}
+.about-intro p:not(.about-eyebrow),.about-section p{font-size:.85rem;line-height:1.7}
+.about-eyebrow{margin:0 0 4px;color:#5c5f6c;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.about-section h3{margin:0 0 12px;font-size:1rem}
+.about-section p{margin:8px 0}
+.about-next{margin-bottom:0}
+.faq-list{display:grid;gap:10px}
+.faq-item{padding:14px 16px;border:1px solid #d6d6dc;border-radius:10px;background:#f7f7f9}
+.faq-item summary{cursor:pointer;font-size:.85rem;font-weight:600}
+.faq-item p{margin:10px 0 0}
 .queue-heading{display:block}
 .page .queue-filter-bar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center}
 .queue-tabs{display:flex;grid-column:1;gap:20px;min-width:0}
@@ -249,6 +264,7 @@ button{font:inherit;cursor:pointer}
 .page > .sub .inline-action{display:inline-flex}
 .form.inline input{min-width:0}
 @media(max-width:800px){
+ .sidebar .about-nav{margin-top:0}
  .queue-title-row{align-items:flex-start;gap:10px}
  .ai-moderation-toggle{width:180px;min-width:0;min-height:72px}
  .form.inline{flex-wrap:wrap}
