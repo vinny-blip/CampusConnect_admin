@@ -3,7 +3,7 @@
     <div class="queue-title-row">
       <h2>Queues</h2>
     </div>
-    <p class="sub">Open each post and check it before you approve or remove it. Reported posts are kept in their own list.</p>
+    <p class="sub">Review posts and comments against the community guidelines. Reported content appears in the reported tab.</p>
   </div>
 </div>
 <p class="sub ai-moderation-note">This toggle saves your preference only. Posts still require manual review.</p>
@@ -27,7 +27,7 @@
         <span class="ai-switch" aria-hidden="true"><span></span></span>
       </button>
     </form>
-    <span class="count"><?= count($posts) ?> shown</span>
+    <span class="count"><?= count($posts) + count($reportedComments) ?> items shown</span>
   </div>
 </nav>
 <section class="queue" aria-live="polite">
@@ -40,23 +40,61 @@
           <span class="avatar sm"><?= h(mb_strtoupper(mb_substr($post['author'], 0, 1))) ?></span>
           <b><?= h($post['author']) ?></b>
           <span>• <a href="<?= h(community_url($post['community'])) ?>"><?= h($post['cname']) ?></a></span>
-          <span>• <?= h(ago((int)$post['created'])) ?></span>
+          <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_label((int)$post['created'])) ?></time>
+          <?php if ($post['status'] === 'removed'): ?>
+            <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_label((int)$post['removedAt'])) ?></time>
+            <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
+          <?php endif; ?>
           <span>• <?= (int)$post['likes'] ?> likes</span>
           <span>• <?= (int)$post['commentCount'] ?> comments</span>
-          <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?></span><?php endif; ?>
+          <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?><?= $post['reportedAt'] !== null ? ' on ' . h(date_label((int)$post['reportedAt'])) : '' ?></span><?php endif; ?>
+          <?php if ($post['locked']): ?><span class="tag">Comments locked</span><?php endif; ?>
         </div>
         <p class="title"><a href="<?= $reviewUrl ?>"><?= h($post['title']) ?></a></p>
+        <?php if ($post['tags']): ?><div class="post-tags"><?php foreach ($post['tags'] as $tag): ?><span class="tag"><?= h($tag) ?></span><?php endforeach; ?></div><?php endif; ?>
         <span class="tag <?= $post['reviewed'] ? 'approved' : 'pending' ?>"><?= $post['reviewed'] ? 'Checked' : 'Needs review' ?></span>
       </div>
       <img class="thumb" src="<?= h($post['image']) ?>" alt="Attached image for <?= h($post['author']) ?>'s post">
       <div class="acts">
         <a href="<?= $reviewUrl ?>"><?= $post['reviewed'] ? 'View' : 'Review' ?></a>
-        <?php post_action($csrf, 'approve', (int)$post['id'], 'Approve', 'ok', !$post['reviewed']); ?>
-        <?php post_action($csrf, 'remove', (int)$post['id'], 'Remove', '', !$post['reviewed']); ?>
+        <?php if ($post['status'] === 'pending'): ?>
+          <?php post_action($csrf, 'approve', (int)$post['id'], 'Approve', 'ok', !$post['reviewed']); ?>
+          <?php post_action($csrf, 'remove', (int)$post['id'], 'Hide', '', !$post['reviewed']); ?>
+        <?php elseif ($post['status'] === 'approved'): ?>
+          <?php post_action($csrf, 'remove', (int)$post['id'], 'Hide'); ?>
+        <?php endif; ?>
+        <?php if ($post['reported']): ?><?php post_action($csrf, 'clear-post-report', (int)$post['id'], 'Dismiss report'); ?><?php endif; ?>
+        <?php if ($kind === 'reported'): ?>
+          <form class="inline-action" method="post" onsubmit="return confirm('Permanently delete this post and its comments?')"><?= $csrf ?><input type="hidden" name="action" value="delete-post"><input type="hidden" name="post_id" value="<?= (int)$post['id'] ?>"><button class="chip danger" type="submit"<?= $post['status'] === 'pending' && !$post['reviewed'] ? ' disabled' : '' ?>>Delete</button></form>
+        <?php endif; ?>
       </div>
     </article>
   <?php endforeach; ?>
-<?php else: ?>
+<?php elseif ($kind !== 'reported' || !$reportedComments): ?>
   <p class="empty"><?= $kind === 'reported' ? 'No reported posts waiting. Nice work.' : 'Nothing left to approve. Nice work.' ?></p>
+<?php endif; ?>
+<?php if ($kind === 'reported'): ?>
+  <section class="reported-comments" aria-labelledby="reported-comments-title">
+    <h3 id="reported-comments-title">Reported comments</h3>
+    <?php if ($reportedComments): ?>
+      <?php foreach ($reportedComments as $comment): ?>
+        <article class="reported-comment">
+          <div>
+            <b><?= h($comment['author']) ?></b>
+            <small>Comment posted <?= h(date_label((int)$comment['created'])) ?><?= $comment['reportedAt'] !== null ? ' • Reported ' . h(date_label((int)$comment['reportedAt'])) : '' ?> on <a href="post.php?id=<?= (int)$comment['postId'] ?>"><?= h($comment['postTitle']) ?></a> (post date: <?= h(date_label((int)$comment['postCreated'])) ?>)</small>
+            <p><?= h($comment['text']) ?></p>
+            <span class="flag">Reported: <?= h($comment['reportReason']) ?></span>
+          </div>
+          <div class="acts">
+            <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="clear-comment-report"><input type="hidden" name="post_id" value="<?= (int)$comment['postId'] ?>"><input type="hidden" name="comment_id" value="<?= (int)$comment['commentId'] ?>"><button class="chip">Dismiss</button></form>
+            <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="hide-comment"><input type="hidden" name="post_id" value="<?= (int)$comment['postId'] ?>"><input type="hidden" name="comment_id" value="<?= (int)$comment['commentId'] ?>"><button class="chip">Hide</button></form>
+            <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="delete-comment"><input type="hidden" name="post_id" value="<?= (int)$comment['postId'] ?>"><input type="hidden" name="comment_id" value="<?= (int)$comment['commentId'] ?>"><button class="chip danger">Delete</button></form>
+          </div>
+        </article>
+      <?php endforeach; ?>
+    <?php else: ?>
+      <p class="empty">No reported comments.</p>
+    <?php endif; ?>
+  </section>
 <?php endif; ?>
 </section>

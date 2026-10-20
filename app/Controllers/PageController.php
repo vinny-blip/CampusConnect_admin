@@ -197,15 +197,22 @@ final class PageController
         $allowedActions = match ($this->page) {
             'home', 'newest', 'posts', 'control', 'saved', 'reported', 'search', 'community'
                 => ['like', 'save', 'pin', 'restore', 'remove'],
-            'post' => ['approve', 'remove', 'save', 'like-comment', 'heart-comment', 'comment'],
-            'queues' => ['approve', 'remove', 'toggle-ai-moderation'],
+            'post' => [
+                'approve', 'remove', 'save', 'like-comment', 'heart-comment', 'comment',
+                'report-post', 'report-comment', 'clear-post-report', 'clear-comment-report',
+                'delete-comment', 'hide-comment', 'restore-comment', 'delete-post', 'edit-post', 'toggle-lock',
+            ],
+            'queues' => [
+                'approve', 'remove', 'toggle-ai-moderation', 'clear-post-report',
+                'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post',
+            ],
             'create' => ['create-post'],
             'communities' => ['star', 'leave', 'Alumni', 'Advisor'],
             'modmail', 'messages' => ['reply', 'new-message'],
             'notifications' => ['read-all'],
             'profile' => ['update-name', 'reset'],
             'restricted' => ['restrict', 'unrestrict'],
-            'comments' => ['delete-comment'],
+            'comments' => ['delete-comment', 'report-comment', 'clear-comment-report', 'hide-comment', 'restore-comment'],
             default => [],
         };
         if (!in_array($action, $allowedActions, true)) {
@@ -253,10 +260,7 @@ final class PageController
                 $this->handleRestrictedAction($action);
                 break;
             case 'comments':
-                if ($action === 'delete-comment') {
-                    $this->posts->removeComment((int)($_POST['post_id'] ?? 0), (int)($_POST['comment_id'] ?? 0));
-                    $this->flash('Comment removed.');
-                }
+                $this->handleCommentAction($action);
                 break;
         }
         $this->redirect($this->returnUrl());
@@ -282,6 +286,31 @@ final class PageController
 
     private function handleQueueAction(string $action): void
     {
+        if ($action === 'delete-post') {
+            $deleted = $this->posts->deletePost((int)($_POST['post_id'] ?? 0), $this->user['name']);
+            $this->flash($deleted ? 'Post permanently deleted.' : 'Post is no longer reported or does not exist.', $deleted ? 'success' : 'error');
+            return;
+        }
+        if ($action === 'clear-post-report') {
+            $cleared = $this->posts->clearPostReport((int)($_POST['post_id'] ?? 0));
+            $this->flash($cleared ? 'Post report dismissed.' : 'Post report was already cleared.', $cleared ? 'success' : 'error');
+            return;
+        }
+        if (in_array($action, ['clear-comment-report', 'delete-comment', 'hide-comment'], true)) {
+            $postId = (int)($_POST['post_id'] ?? 0);
+            $commentId = (int)($_POST['comment_id'] ?? 0);
+            if ($action === 'delete-comment') {
+                $this->posts->removeComment($postId, $commentId);
+                $this->flash('Comment removed.');
+            } elseif ($action === 'hide-comment') {
+                $hidden = $this->posts->hideComment($postId, $commentId);
+                $this->flash($hidden ? 'Comment hidden and report closed.' : 'Comment not found.', $hidden ? 'success' : 'error');
+            } else {
+                $cleared = $this->posts->clearCommentReport($postId, $commentId);
+                $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
+            }
+            return;
+        }
         $status = $action === 'approve' ? 'approved' : ($action === 'remove' ? 'removed' : '');
         if ($status === '') {
             if ($action === 'toggle-ai-moderation') {
@@ -307,14 +336,74 @@ final class PageController
             }
         } elseif ($action === 'save') {
             $this->flash($this->posts->toggleSave($id) ? 'Saved.' : 'Removed from saved.');
+        } elseif ($action === 'delete-post') {
+            $deleted = $this->posts->deletePost($id, $this->user['name']);
+            $this->flash($deleted ? 'Post permanently deleted.' : 'Post is no longer reported or does not exist.', $deleted ? 'success' : 'error');
+            if ($deleted) {
+                $this->redirect(isset($_GET['review']) ? 'queues.php?tab=reported' : 'home.php');
+            }
+        } elseif ($action === 'report-post') {
+            $result = $this->posts->reportPost($id, (string)($_POST['reason'] ?? ''));
+            $this->flash($result['error'] ?? 'Post reported for moderator review.', isset($result['error']) ? 'error' : 'success');
+        } elseif ($action === 'clear-post-report') {
+            $cleared = $this->posts->clearPostReport($id);
+            $this->flash($cleared ? 'Post report dismissed.' : 'Post report was already cleared.', $cleared ? 'success' : 'error');
+        } elseif ($action === 'report-comment') {
+            $result = $this->posts->reportComment($id, $commentId, (string)($_POST['reason'] ?? ''));
+            $this->flash($result['error'] ?? 'Comment reported for moderator review.', isset($result['error']) ? 'error' : 'success');
+        } elseif ($action === 'clear-comment-report') {
+            $cleared = $this->posts->clearCommentReport($id, $commentId);
+            $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
+        } elseif ($action === 'delete-comment') {
+            $this->posts->removeComment($id, $commentId);
+            $this->flash('Comment removed.');
+        } elseif ($action === 'hide-comment' || $action === 'restore-comment') {
+            $hidden = $action === 'hide-comment';
+            $updated = $this->posts->hideComment($id, $commentId, $hidden);
+            $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
+        } elseif ($action === 'edit-post') {
+            $result = $this->posts->updatePost(
+                $id,
+                (string)($_POST['title'] ?? ''),
+                (string)($_POST['body'] ?? ''),
+                (string)($_POST['tags'] ?? '')
+            );
+            $this->flash($result['error'] ?? 'Post updated.', isset($result['error']) ? 'error' : 'success');
+        } elseif ($action === 'toggle-lock') {
+            $locked = $this->posts->toggleLock($id);
+            $this->flash($locked === null ? 'Post not found.' : ($locked ? 'Comments locked.' : 'Comments unlocked.'), $locked === null ? 'error' : 'success');
         } elseif ($action === 'like-comment' || $action === 'heart-comment') {
             $this->posts->reactComment($id, $commentId, $action === 'like-comment' ? 'likes' : 'hearts');
         } elseif ($action === 'comment') {
             if (!$this->posts->addComment($id, $this->user['name'], (string)($_POST['text'] ?? ''))) {
-                $this->flash('Write a comment first.', 'error');
+                $post = $this->posts->get($id);
+                $message = $post === null
+                    ? 'Post not found.'
+                    : (!empty($post['locked']) ? 'Comments are locked for this post.' : ($post['status'] !== 'approved' ? 'Comments are unavailable for this post.' : 'Write a comment first.'));
+                $this->flash($message, 'error');
             } elseif (isset($_GET['reply'])) {
                 $this->redirect('post.php?id=' . $id . (isset($_GET['review']) ? '&review=1' : ''));
             }
+        }
+    }
+
+    private function handleCommentAction(string $action): void
+    {
+        $postId = (int)($_POST['post_id'] ?? 0);
+        $commentId = (int)($_POST['comment_id'] ?? 0);
+        if ($action === 'delete-comment') {
+            $this->posts->removeComment($postId, $commentId);
+            $this->flash('Comment removed.');
+        } elseif ($action === 'hide-comment' || $action === 'restore-comment') {
+            $hidden = $action === 'hide-comment';
+            $updated = $this->posts->hideComment($postId, $commentId, $hidden);
+            $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
+        } elseif ($action === 'report-comment') {
+            $result = $this->posts->reportComment($postId, $commentId, (string)($_POST['reason'] ?? ''));
+            $this->flash($result['error'] ?? 'Comment reported for moderator review.', isset($result['error']) ? 'error' : 'success');
+        } elseif ($action === 'clear-comment-report') {
+            $cleared = $this->posts->clearCommentReport($postId, $commentId);
+            $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
         }
     }
 
@@ -440,6 +529,7 @@ final class PageController
                 'query' => $query,
                 'counts' => $this->posts->counts(),
                 'posts' => $this->named($this->posts->queue($kind, $query)),
+                'reportedComments' => $kind === 'reported' ? $this->posts->reportedComments($query) : [],
                 'aiModerationEnabled' => $this->aiModeration->enabled(),
             ];
         } elseif ($this->page === 'post') {
@@ -453,6 +543,7 @@ final class PageController
         } elseif ($this->page === 'overview') {
             $data['counts'] = $this->posts->counts();
             $data['activity'] = $this->posts->activity();
+            $data['reportCountsByDate'] = $this->posts->reportCountsByDate();
         } elseif ($this->page === 'communities') {
             $data['communityCount'] = count($data['communities']);
         } elseif (in_array($this->page, ['modmail', 'messages'], true)) {
@@ -530,6 +621,8 @@ final class PageController
             'query' => $query,
             'searchCommunities' => $searchCommunities,
             'mode' => $this->page,
+            'topLikedToday' => $this->page === 'home' ? $this->posts->topLikedToday() : [],
+            'reportCountsByDate' => $this->page === 'home' ? $this->posts->reportCountsByDate(7) : [],
         ];
     }
 

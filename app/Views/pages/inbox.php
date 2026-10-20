@@ -3,7 +3,7 @@
 <p class="sub"><?= $isModMail ? 'Conversations between students and the moderator team.' : 'Direct messages with other members.' ?></p>
 <div class="inbox">
   <div class="tlist">
-    <a class="titem new" href="<?= h($page) ?>.php">＋ New <?= $isModMail ? 'mod mail' : 'message' ?></a>
+    <a class="titem new" href="<?= h($page) ?>.php"><?= icon_svg('plus') ?> New <?= $isModMail ? 'mod mail' : 'message' ?></a>
     <?php foreach ($threads as $thread): ?>
       <?php $lastMessage = $thread['messages'][count($thread['messages']) - 1]; ?>
       <a class="titem<?= ($current['id'] ?? 0) === $thread['id'] ? ' on' : '' ?><?= $thread['unread'] ? ' unread' : '' ?>" href="<?= h($page) ?>.php?t=<?= (int)$thread['id'] ?>">

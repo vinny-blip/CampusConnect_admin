@@ -17,23 +17,21 @@
         <input id="search" class="search" name="q" type="search" placeholder="Search CampusConnect" aria-label="Search CampusConnect" value="<?= h($_GET['q'] ?? '') ?>">
       </form>
       <div class="top-actions">
-        <a class="icon-btn" href="messages.php" aria-label="Messages" title="Messages">💬<span class="badge"><?= $messageCount ?: '' ?></span></a>
-        <a class="create" href="create.php"><span aria-hidden="true">＋</span> Create Post</a>
-        <a class="icon-btn" href="notifications.php" aria-label="Notifications" title="Notifications">🔔<span class="badge"><?= $noteCount ?: '' ?></span></a>
+        <a class="icon-btn" href="messages.php" aria-label="Messages" title="Messages"><?= icon_svg('message') ?><span class="badge"><?= $messageCount ?: '' ?></span></a>
+        <a class="create" href="create.php"><?= icon_svg('plus') ?> Create Post</a>
+        <a class="icon-btn" href="notifications.php" aria-label="Notifications" title="Notifications"><?= icon_svg('bell') ?><span class="badge"><?= $noteCount ?: '' ?></span></a>
         <a class="avatar" href="profile.php" aria-label="Profile" title="<?= h($user['name']) ?>"><?= h(initials($user['name'])) ?></a>
       </div>
     </header>
     <div class="body">
       <nav class="sidebar" aria-label="Main">
-        <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico" aria-hidden="true">⌂</span>Home</a>
-        <a class="<?= $page === 'newest' ? 'on' : '' ?>" href="newest.php"><span class="ico" aria-hidden="true">↗</span>Newest</a>
-        <a class="<?= $page === 'control' ? 'on' : '' ?>" href="control.php">Control Posts/Feed</a>
+        <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Home</a>
+        <a class="<?= $page === 'newest' ? 'on' : '' ?>" href="newest.php"><span class="ico"><?= icon_svg('clock') ?></span>Newest</a>
+        <a class="<?= $page === 'control' ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Posts/Feed</a>
         <h4><a class="<?= $page === 'communities' ? 'on' : '' ?>" href="communities.php">Moderating</a></h4>
-        <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico" aria-hidden="true">▣</span>Queues</a>
-        <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico" aria-hidden="true">✉</span>Mod Mail</a>
-        <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico" aria-hidden="true">●</span><span>r/designatmobbin</span></a>
-        <a class="about-nav <?= $page === 'about' ? 'on' : '' ?>" href="about.php"><span class="ico" aria-hidden="true">ⓘ</span>About Us</a>
-        <a class="<?= $page === 'faqs' ? 'on' : '' ?>" href="faqs.php"><span class="ico" aria-hidden="true">?</span>FAQs</a>
+        <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico"><?= icon_svg('queue') ?></span>Queues</a>
+        <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico"><?= icon_svg('mail') ?></span>Mod Mail</a>
+        <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico"><?= icon_svg('users') ?></span><span>r/designatmobbin</span></a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>
           <input type="hidden" name="action" value="logout">

@@ -7,12 +7,13 @@
   <a class="stat" href="posts.php?status=removed"><b><?= (int)$counts['removed'] ?></b>Removed posts</a>
   <a class="stat" href="comments.php"><b><?= (int)$counts['comments'] ?></b>Comments</a>
 </div>
+<?php $reportChartCompact = false; require dirname(__DIR__) . '/partials/report-chart.php'; ?>
 <h3 class="chead">Recent moderator activity</h3>
 <?php if ($activity): ?>
   <?php foreach ($activity as $item): ?>
     <div class="row-item"><span><b><?= h($item['mod']) ?></b> <?= h(mb_strtolower($item['action'])) ?>
       <a href="post.php?id=<?= (int)$item['postId'] ?>"><?= h($item['title']) ?></a></span>
-      <small><?= h(ago((int)$item['t'])) ?></small></div>
+      <small><?= h(date_label((int)$item['t'])) ?></small></div>
   <?php endforeach; ?>
 <?php else: ?>
   <p class="empty">No activity yet. Approve or remove a post from the queue and it shows up here.</p>
