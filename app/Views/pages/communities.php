@@ -11,7 +11,7 @@
         <?php if ($community['request']): ?><small class="flag"> • <?= h($community['request']) ?> role requested</small><?php endif; ?>
       </div>
       <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="star"><input type="hidden" name="slug" value="<?= h($community['slug']) ?>">
-        <button class="star" aria-label="<?= $community['starred'] ? 'Remove from favorites' : 'Add to favorites' ?>" aria-pressed="<?= $community['starred'] ? 'true' : 'false' ?>"><?= $community['starred'] ? '★' : '☆' ?></button></form>
+        <button class="star" aria-label="<?= $community['starred'] ? 'Remove from favorites' : 'Add to favorites' ?>" aria-pressed="<?= $community['starred'] ? 'true' : 'false' ?>"><?= icon_svg($community['starred'] ? 'star-filled' : 'star') ?></button></form>
       <details class="community-menu">
         <summary class="more" aria-label="More options for <?= h($community['name']) ?>">⋯</summary>
         <div class="menu community-menu-items">

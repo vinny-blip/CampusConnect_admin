@@ -6,6 +6,8 @@ final class PostModel extends StateModel
     private const POSTS = 'posts';
     private const SAVED = 'saved';
     private const LOG = 'log';
+    private const REPORT_HISTORY = 'report_history';
+    private const REPORT_SAMPLE_VERSION = 'report_sample_version';
     private const SLUGS = ['itters', 'engineering', 'educers', 'cbaers', 'designatmobbin'];
     private const TITLES = [
         'Hi! Can anyone help me with this one, please?',
@@ -17,9 +19,30 @@ final class PostModel extends StateModel
         'Selling my used Engineering textbook',
         'Who has the schedule for enrollment week?',
     ];
-    private const REASONS = [
-        'Spam or advertising', 'Harassment or bullying', 'Misleading information',
-        'Off-topic for this community', 'Inappropriate content', 'Selling without permission',
+    private const REPORTED_EXAMPLES = [
+        0 => [
+            'title' => 'Paid exam answers and streaming accounts',
+            'body' => 'DM me for paid access to exam answer keys and streaming accounts. This is an unrelated promotion, not an academic discussion.',
+            'reason' => 'Non-academic content',
+        ],
+        6 => [
+            'title' => 'Personal attack in the calculus discussion',
+            'body' => 'You are clueless and should stop asking basic questions. Nobody wants to help you.',
+            'reason' => 'Toxic or harassing content',
+        ],
+        12 => [
+            'title' => 'Uncredited lab conclusion submitted as original work',
+            'body' => 'This conclusion was copied from another student’s lab report and is being shared here as original work: “The results support the hypothesis because the measured values followed the predicted pattern.”',
+            'reason' => 'Plagiarized content',
+        ],
+        30 => [
+            'title' => 'Repeated tutoring-service advertisement',
+            'body' => 'Buy my assignment-writing and tutoring package. Message me for prices. This promotion is unrelated to the course discussion.',
+            'reason' => 'Non-academic content',
+        ],
+    ];
+    private const REPORT_REASONS = [
+        'Non-academic content', 'Toxic or harassing content', 'Plagiarized content', 'Other guideline violation',
     ];
     private const COMMENTS = [
         ['Juan Dela Cruz', 'The road near Lacson Street is flooded, take another route.'],
@@ -31,7 +54,13 @@ final class PostModel extends StateModel
 
     private function all(): array
     {
-        return $this->load(self::POSTS, fn() => $this->seedPosts());
+        $posts = $this->load(self::POSTS, fn() => $this->seedPosts());
+        $sampleVersion = $this->load(self::REPORT_SAMPLE_VERSION, static fn() => []);
+        if ((int)($sampleVersion[0] ?? 0) < 1) {
+            $this->updateSeedReportedExamples($posts);
+            $this->save(self::REPORT_SAMPLE_VERSION, [1]);
+        }
+        return $posts;
     }
 
     private function seedPosts(): array
@@ -39,7 +68,9 @@ final class PostModel extends StateModel
         $posts = [];
         foreach (range(0, 39) as $i) {
             $status = $i % 5 === 4 ? 'approved' : 'pending';
-            $reported = $status === 'pending' && $i % 6 === 0;
+            $example = self::REPORTED_EXAMPLES[$i] ?? null;
+            $reported = $status === 'pending' && $example !== null;
+            $created = $this->ago(5 + $i * 13);
             $commentCount = $i === 0 ? 3 : $i % 5;
             $comments = [];
             for ($k = 0; $k < $commentCount; $k++) {
@@ -49,6 +80,8 @@ final class PostModel extends StateModel
                     'author' => $source[0],
                     'text' => $source[1],
                     'created' => $this->ago(15 + $k * 20),
+                    'reportedAt' => null,
+                    'hidden' => false,
                     'likes' => ($k * 5 + $i) % 15,
                     'hearts' => ($k * 3 + $i) % 12,
                 ];
@@ -57,25 +90,75 @@ final class PostModel extends StateModel
                 'id' => $i + 1,
                 'author' => 'anonymous' . ($i + 1),
                 'community' => self::SLUGS[$i % count(self::SLUGS)],
-                'title' => $i === 0 ? 'Cherish the moments with your friends!' : self::TITLES[$i % count(self::TITLES)],
-                'body' => $i === 0
+                'title' => $example['title'] ?? ($i === 0 ? 'Cherish the moments with your friends!' : self::TITLES[$i % count(self::TITLES)]),
+                'body' => $example['body'] ?? ($i === 0
                     ? 'Take a moment today to thank the people who made this semester easier. Share a memory with your friends in the comments.'
-                    : 'Posted by a student. Replies and notes from classmates are welcome in the comments.',
+                    : 'Posted by a student. Replies and notes from classmates are welcome in the comments.'),
                 'image' => $this->art($i),
-                'created' => $this->ago(5 + $i * 13),
+                'created' => $created,
+                'removedAt' => null,
                 'likes' => ($i * 7) % 45 + 3,
                 'liked' => false,
                 'pinned' => false,
+                'locked' => false,
+                'tags' => [],
                 'status' => $status,
                 'reported' => $reported,
-                'reportReason' => $reported ? self::REASONS[(int)($i / 6) % count(self::REASONS)] : '',
+                'reportReason' => $reported ? $example['reason'] : '',
+                'reportedAt' => $reported ? $created : null,
                 'reviewed' => false,
                 'commentList' => $comments,
             ];
+            if ($reported) {
+                $this->recordReport($created);
+            }
         }
         $this->save(self::SAVED, []);
         $this->save(self::LOG, []);
         return $posts;
+    }
+
+    private function updateSeedReportedExamples(array &$posts): void
+    {
+        $changed = false;
+        foreach ($posts as &$post) {
+            $id = (int)($post['id'] ?? 0);
+            $index = $id - 1;
+            if ($index < 0 || $index >= 40
+                || ($post['author'] ?? '') !== 'anonymous' . $id
+                || ($post['status'] ?? '') !== 'pending') {
+                continue;
+            }
+            $defaultTitle = $index === 0
+                ? 'Cherish the moments with your friends!'
+                : self::TITLES[$index % count(self::TITLES)];
+            $defaultBody = $index === 0
+                ? 'Take a moment today to thank the people who made this semester easier. Share a memory with your friends in the comments.'
+                : 'Posted by a student. Replies and notes from classmates are welcome in the comments.';
+            if (($post['title'] ?? '') !== $defaultTitle || ($post['body'] ?? '') !== $defaultBody || empty($post['reported'])) {
+                continue;
+            }
+
+            $example = self::REPORTED_EXAMPLES[$index] ?? null;
+            if ($example !== null) {
+                $post['title'] = $example['title'];
+                $post['body'] = $example['body'];
+                $post['reportReason'] = $example['reason'];
+                if (empty($post['reportedAt'])) {
+                    $post['reportedAt'] = (int)$post['created'];
+                    $this->recordReport((int)$post['reportedAt']);
+                }
+            } else {
+                $post['reported'] = false;
+                $post['reportReason'] = '';
+                $post['reportedAt'] = null;
+            }
+            $changed = true;
+        }
+        unset($post);
+        if ($changed) {
+            $this->save(self::POSTS, $posts);
+        }
     }
 
     private function ago(int $minutes): int
@@ -136,6 +219,27 @@ final class PostModel extends StateModel
 
     private function enrich(array $post): array
     {
+        $post['reported'] = (bool)($post['reported'] ?? false);
+        $post['reportReason'] = (string)($post['reportReason'] ?? '');
+        $post['reportedAt'] = isset($post['reportedAt']) ? (int)$post['reportedAt'] : null;
+        $post['removedAt'] = isset($post['removedAt']) ? (int)$post['removedAt'] : null;
+        if ($post['status'] === 'removed' && $post['removedAt'] === null) {
+            foreach ($this->load(self::LOG, static fn() => []) as $entry) {
+                if ((int)($entry['postId'] ?? 0) === (int)$post['id'] && ($entry['action'] ?? '') === 'Removed') {
+                    $post['removedAt'] = (int)$entry['t'];
+                    break;
+                }
+            }
+        }
+        $post['locked'] = (bool)($post['locked'] ?? false);
+        $post['tags'] = is_array($post['tags'] ?? null) ? $post['tags'] : [];
+        foreach ($post['commentList'] as &$comment) {
+            $comment['reported'] = (bool)($comment['reported'] ?? false);
+            $comment['reportReason'] = (string)($comment['reportReason'] ?? '');
+            $comment['reportedAt'] = isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null;
+            $comment['hidden'] = (bool)($comment['hidden'] ?? false);
+        }
+        unset($comment);
         $post['commentCount'] = count($post['commentList']);
         $post['saved'] = in_array($post['id'], $this->savedIds(), true);
         return $post;
@@ -158,7 +262,10 @@ final class PostModel extends StateModel
             return (!$status || $post['status'] === $status)
                 && (!$community || $post['community'] === $community)
                 && ($reported === null || (bool)$post['reported'] === $reported)
-                && ($query === '' || str_contains(mb_strtolower($post['title'] . ' ' . $post['author'] . ' ' . $post['community']), $query));
+                && ($query === '' || str_contains(mb_strtolower(
+                    $post['title'] . ' ' . $post['body'] . ' ' . implode(' ', $post['tags'] ?? []) . ' '
+                    . $post['author'] . ' ' . $post['community']
+                ), $query));
         });
         usort($posts, static function ($a, $b) use ($sort): int {
             $pin = (int)$b['pinned'] <=> (int)$a['pinned'];
@@ -174,7 +281,124 @@ final class PostModel extends StateModel
 
     public function queue(string $kind, string $query = ''): array
     {
-        return $this->find('pending', null, $query, $kind === 'reported');
+        return $kind === 'reported'
+            ? $this->find(null, null, $query, true)
+            : $this->find('pending', null, $query, false);
+    }
+
+    public function reportedComments(string $query = ''): array
+    {
+        $query = mb_strtolower(trim($query));
+        $comments = [];
+        foreach ($this->all() as $post) {
+            foreach ($post['commentList'] as $comment) {
+                if (empty($comment['reported'])) {
+                    continue;
+                }
+                if ($query !== '' && !str_contains(mb_strtolower(
+                    $post['title'] . ' ' . $comment['author'] . ' ' . $comment['text']
+                ), $query)) {
+                    continue;
+                }
+                $comments[] = [
+                    'postId' => (int)$post['id'],
+                    'postTitle' => (string)$post['title'],
+                    'postCreated' => (int)$post['created'],
+                    'postStatus' => (string)$post['status'],
+                    'postRemovedAt' => isset($post['removedAt']) ? (int)$post['removedAt'] : null,
+                    'commentId' => (int)$comment['id'],
+                    'author' => (string)$comment['author'],
+                    'text' => (string)$comment['text'],
+                    'created' => (int)$comment['created'],
+                    'reportReason' => (string)($comment['reportReason'] ?? ''),
+                    'reportedAt' => isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null,
+                ];
+            }
+        }
+        usort($comments, static fn($a, $b): int => $b['created'] <=> $a['created']);
+        return $comments;
+    }
+
+    public function reportCountsByDate(int $days = 14): array
+    {
+        $days = max(1, min(90, $days));
+        $history = $this->load(self::REPORT_HISTORY, static fn() => []);
+        $today = new DateTimeImmutable('today');
+        $results = [];
+        for ($offset = $days - 1; $offset >= 0; $offset--) {
+            $date = $today->modify("-{$offset} days");
+            $key = $date->format('Y-m-d');
+            $results[] = [
+                'date' => $key,
+                'label' => $date->format('M j'),
+                'count' => max(0, (int)($history[$key] ?? 0)),
+            ];
+        }
+        return $results;
+    }
+
+    private function recordReport(int $timestamp): void
+    {
+        $history = $this->load(self::REPORT_HISTORY, static fn() => []);
+        $date = date('Y-m-d', intdiv($timestamp, 1000));
+        $history[$date] = (int)($history[$date] ?? 0) + 1;
+        $this->save(self::REPORT_HISTORY, $history);
+    }
+
+    public function trendingTopics(int $limit = 5): array
+    {
+        $todayStart = (int)strtotime('today') * 1000;
+        $stopWords = [
+            'about', 'after', 'again', 'any', 'anyone', 'are', 'can', 'could', 'for', 'from',
+            'help', 'here', 'how', 'have', 'into', 'just', 'looking', 'please', 'someone',
+            'that', 'the', 'this', 'those', 'what', 'when', 'where', 'which', 'who', 'with',
+            'would', 'you', 'your',
+        ];
+        $topics = [];
+        foreach ($this->all() as $post) {
+            $todayComments = count(array_filter(
+                $post['commentList'],
+                static fn($comment): bool => (int)$comment['created'] >= $todayStart
+            ));
+            if ($todayComments === 0) {
+                continue;
+            }
+
+            $words = preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower((string)$post['title'])) ?: [];
+            foreach (array_unique($words) as $word) {
+                if (mb_strlen($word) < 3 || !preg_match('/\p{L}/u', $word) || in_array($word, $stopWords, true)) {
+                    continue;
+                }
+                if (!isset($topics[$word])) {
+                    $topics[$word] = ['topic' => $word, 'comments' => 0, 'posts' => 0];
+                }
+                $topics[$word]['comments'] += $todayComments;
+                $topics[$word]['posts']++;
+            }
+        }
+
+        $topics = array_values($topics);
+        usort($topics, static fn($a, $b): int =>
+            ($b['comments'] <=> $a['comments'])
+            ?: ($b['posts'] <=> $a['posts'])
+            ?: strcmp($a['topic'], $b['topic'])
+        );
+        return array_slice($topics, 0, max(0, $limit));
+    }
+
+    public function topLikedToday(int $limit = 5): array
+    {
+        $todayStart = (int)strtotime('today') * 1000;
+        $posts = array_filter($this->all(), static fn($post): bool =>
+            $post['status'] === 'approved' && (int)$post['created'] >= $todayStart
+        );
+        usort($posts, static fn($a, $b): int =>
+            ($b['likes'] <=> $a['likes']) ?: ($b['created'] <=> $a['created'])
+        );
+        return array_map(
+            fn($post) => $this->enrich($post),
+            array_slice(array_values($posts), 0, max(0, $limit))
+        );
     }
 
     public function counts(): array
@@ -185,13 +409,18 @@ final class PostModel extends StateModel
             if ($post['status'] === 'pending' && !$post['reported']) {
                 $counts['toApprove']++;
             }
-            if ($post['status'] === 'pending' && $post['reported']) {
+            if ($post['reported']) {
                 $counts['reported']++;
             }
             if (isset($counts[$post['status']])) {
                 $counts[$post['status']]++;
             }
-            $counts['comments'] += count($post['commentList']);
+            foreach ($post['commentList'] as $comment) {
+                $counts['comments']++;
+                if (!empty($comment['reported'])) {
+                    $counts['reported']++;
+                }
+            }
         }
         return $counts;
     }
@@ -219,6 +448,10 @@ final class PostModel extends StateModel
                 return ['error' => 'Open and check this post before you approve or remove it.'];
             }
             $post['status'] = $status;
+            $post['reported'] = false;
+            $post['reportReason'] = '';
+            $post['reportedAt'] = null;
+            $post['removedAt'] = $status === 'removed' ? (int)(microtime(true) * 1000) : null;
             if ($status === 'removed') {
                 $post['pinned'] = false;
             }
@@ -230,12 +463,116 @@ final class PostModel extends StateModel
         return ['error' => 'Post not found.'];
     }
 
+    public function reportPost(int $id, string $reason): array
+    {
+        if (!in_array($reason, self::REPORT_REASONS, true)) {
+            return ['error' => 'Choose a valid report reason.'];
+        }
+        $updated = false;
+        $timestamp = (int)(microtime(true) * 1000);
+        $this->update($id, static function (&$post) use ($reason, $timestamp, &$updated): void {
+            if ($post['status'] === 'removed') {
+                return;
+            }
+            if (!empty($post['reported'])) {
+                return;
+            }
+            $post['reported'] = true;
+            $post['reportReason'] = $reason;
+            $post['reportedAt'] = $timestamp;
+            $updated = true;
+        });
+        if (!$updated) {
+            return ['error' => 'This post is already reported or is no longer available.'];
+        }
+        $this->recordReport($timestamp);
+        return [];
+    }
+
+    public function clearPostReport(int $id): bool
+    {
+        $cleared = false;
+        $this->update($id, static function (&$post) use (&$cleared): void {
+            $cleared = !empty($post['reported']);
+            $post['reported'] = false;
+            $post['reportReason'] = '';
+            $post['reportedAt'] = null;
+        });
+        return $cleared;
+    }
+
+    public function deletePost(int $id, string $moderator): bool
+    {
+        $posts = $this->all();
+        foreach ($posts as $index => $post) {
+            if ((int)$post['id'] !== $id) {
+                continue;
+            }
+            if (empty($post['reported'])) {
+                return false;
+            }
+            $this->log($moderator, 'Deleted', $post);
+            unset($posts[$index]);
+            $this->save(self::POSTS, array_values($posts));
+            $this->save(self::SAVED, array_values(array_diff($this->savedIds(), [$id])));
+            return true;
+        }
+        return false;
+    }
+
+    public function updatePost(int $id, string $title, string $body, string $tags): array
+    {
+        $title = trim($title);
+        $body = trim($body);
+        if (mb_strlen($title) < 5 || mb_strlen($title) > 140) {
+            return ['error' => 'The title must be between 5 and 140 characters.'];
+        }
+        if (mb_strlen($body) > 5000) {
+            return ['error' => 'Post text must be 5,000 characters or fewer.'];
+        }
+        $normalizedTags = [];
+        foreach (preg_split('/[,\\n]+/', $tags) ?: [] as $tag) {
+            $tag = trim($tag);
+            if ($tag === '') {
+                continue;
+            }
+            if (mb_strlen($tag) > 24) {
+                return ['error' => 'Each tag must be 24 characters or fewer.'];
+            }
+            $normalizedTags[] = $tag;
+        }
+        $normalizedTags = array_values(array_unique($normalizedTags));
+        if (count($normalizedTags) > 5) {
+            return ['error' => 'A post can have up to five tags.'];
+        }
+
+        $updated = false;
+        $this->update($id, static function (&$post) use ($title, $body, $normalizedTags, &$updated): void {
+            $post['title'] = $title;
+            $post['body'] = $body;
+            $post['tags'] = $normalizedTags;
+            $updated = true;
+        });
+        return $updated ? [] : ['error' => 'Post not found.'];
+    }
+
+    public function toggleLock(int $id): ?bool
+    {
+        $locked = null;
+        $this->update($id, static function (&$post) use (&$locked): void {
+            $post['locked'] = !($post['locked'] ?? false);
+            $locked = $post['locked'];
+        });
+        return $locked;
+    }
+
     public function restore(int $id, string $moderator): void
     {
         $found = null;
         $this->update($id, static function (&$post) use (&$found): void {
             $post['status'] = 'pending';
             $post['reviewed'] = false;
+            $post['removedAt'] = null;
             $found = $post;
         });
         if ($found !== null) {
@@ -284,7 +621,11 @@ final class PostModel extends StateModel
         if ($text === '') {
             return false;
         }
-        return $this->update($postId, static function (&$post) use ($author, $text): void {
+        $added = false;
+        $this->update($postId, static function (&$post) use ($author, $text, &$added): void {
+            if (!empty($post['locked']) || $post['status'] !== 'approved') {
+                return;
+            }
             $ids = array_column($post['commentList'], 'id');
             $post['commentList'][] = [
                 'id' => $ids ? max($ids) + 1 : 1,
@@ -293,8 +634,83 @@ final class PostModel extends StateModel
                 'created' => (int)(microtime(true) * 1000),
                 'likes' => 0,
                 'hearts' => 0,
+                'reported' => false,
+                'reportReason' => '',
+                'hidden' => false,
             ];
+            $added = true;
         });
+        return $added;
+    }
+
+    public function reportComment(int $postId, int $commentId, string $reason): array
+    {
+        if (!in_array($reason, self::REPORT_REASONS, true)) {
+            return ['error' => 'Choose a valid report reason.'];
+        }
+        $updated = false;
+        $timestamp = (int)(microtime(true) * 1000);
+        $this->update($postId, static function (&$post) use ($commentId, $reason, $timestamp, &$updated): void {
+            if ($post['status'] === 'removed') {
+                return;
+            }
+            foreach ($post['commentList'] as &$comment) {
+                if ((int)$comment['id'] !== $commentId || !empty($comment['reported']) || !empty($comment['hidden'])) {
+                    continue;
+                }
+                $comment['reported'] = true;
+                $comment['reportReason'] = $reason;
+                $comment['reportedAt'] = $timestamp;
+                $updated = true;
+                break;
+            }
+            unset($comment);
+        });
+        if (!$updated) {
+            return ['error' => 'This comment is already reported or is no longer available.'];
+        }
+        $this->recordReport($timestamp);
+        return [];
+    }
+
+    public function clearCommentReport(int $postId, int $commentId): bool
+    {
+        $cleared = false;
+        $this->update($postId, static function (&$post) use ($commentId, &$cleared): void {
+            foreach ($post['commentList'] as &$comment) {
+                if ((int)$comment['id'] === $commentId) {
+                    $cleared = !empty($comment['reported']);
+                    $comment['reported'] = false;
+                    $comment['reportReason'] = '';
+                    $comment['reportedAt'] = null;
+                    break;
+                }
+            }
+            unset($comment);
+        });
+        return $cleared;
+    }
+
+    public function hideComment(int $postId, int $commentId, bool $hidden = true): bool
+    {
+        $updated = false;
+        $this->update($postId, static function (&$post) use ($commentId, $hidden, &$updated): void {
+            foreach ($post['commentList'] as &$comment) {
+                if ((int)$comment['id'] !== $commentId) {
+                    continue;
+                }
+                $comment['hidden'] = $hidden;
+                if ($hidden) {
+                    $comment['reported'] = false;
+                    $comment['reportReason'] = '';
+                    $comment['reportedAt'] = null;
+                }
+                $updated = true;
+                break;
+            }
+            unset($comment);
+        });
+        return $updated;
     }
 
     public function removeComment(int $postId, int $commentId): void
@@ -314,7 +730,7 @@ final class PostModel extends StateModel
         }
         $this->update($postId, static function (&$post) use ($commentId, $reaction): void {
             foreach ($post['commentList'] as &$comment) {
-                if ((int)$comment['id'] === $commentId) {
+                if ((int)$comment['id'] === $commentId && empty($comment['hidden'])) {
                     $comment[$reaction]++;
                     break;
                 }
@@ -330,6 +746,13 @@ final class PostModel extends StateModel
             foreach ($post['commentList'] as $comment) {
                 $comment['postId'] = $post['id'];
                 $comment['postTitle'] = $post['title'];
+                $comment['postCreated'] = (int)$post['created'];
+                $comment['postStatus'] = (string)$post['status'];
+                $comment['postRemovedAt'] = isset($post['removedAt']) ? (int)$post['removedAt'] : null;
+                $comment['reported'] = (bool)($comment['reported'] ?? false);
+                $comment['reportReason'] = (string)($comment['reportReason'] ?? '');
+                $comment['reportedAt'] = isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null;
+                $comment['hidden'] = (bool)($comment['hidden'] ?? false);
                 $comments[] = $comment;
             }
         }
@@ -341,11 +764,30 @@ final class PostModel extends StateModel
     {
         $community = trim((string)($data['community'] ?? ''));
         $title = trim((string)($data['title'] ?? ''));
+        $body = trim((string)($data['body'] ?? ''));
         if (!in_array($community, self::SLUGS, true)) {
             return ['error' => 'Choose a community to post in.'];
         }
         if (mb_strlen($title) < 5) {
             return ['error' => 'Title must be at least 5 characters.'];
+        }
+        if (mb_strlen($body) > 5000) {
+            return ['error' => 'Post text must be 5,000 characters or fewer.'];
+        }
+        $tags = [];
+        foreach (preg_split('/[,\\n]+/', (string)($data['tags'] ?? '')) ?: [] as $tag) {
+            $tag = trim($tag);
+            if ($tag === '') {
+                continue;
+            }
+            if (mb_strlen($tag) > 24) {
+                return ['error' => 'Each tag must be 24 characters or fewer.'];
+            }
+            $tags[] = $tag;
+        }
+        $tags = array_values(array_unique($tags));
+        if (count($tags) > 5) {
+            return ['error' => 'A post can have up to five tags.'];
         }
         $posts = $this->all();
         $ids = array_column($posts, 'id');
@@ -355,12 +797,15 @@ final class PostModel extends StateModel
             'author' => $author,
             'community' => $community,
             'title' => $title,
-            'body' => trim((string)($data['body'] ?? '')),
+            'body' => $body,
             'image' => (string)($data['image'] ?? '') ?: $this->art($id),
             'created' => (int)(microtime(true) * 1000),
+            'removedAt' => null,
             'likes' => 0,
             'liked' => false,
             'pinned' => false,
+            'locked' => false,
+            'tags' => $tags,
             'status' => 'approved',
             'reported' => false,
             'reportReason' => '',

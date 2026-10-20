@@ -30,9 +30,17 @@ The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@u
 | Overview, Posts, Comments, Saved, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `saved.php`, `restricted.php`, `reported.php` |
 | Create Post, Notifications, Profile, Search | `create.php`, `notifications.php`, `profile.php`, `search.php` |
 
-## Queue rules
+## Reporting and moderation
 
-Pending posts are split into **To approve** and **Reported**. Open a post to review it before approving or removing it. The queue's AI Moderation switch saves a per-account preference only; it does not automatically review or change posts.
+Students can report posts and comments as non-academic, toxic or harassing, plagiarized, or another guideline violation. Reported posts and comments appear in **Queues → Reported** for moderator review. Moderators can dismiss reports, approve pending posts, hide posts or comments, and permanently delete reported content.
+
+Demo data includes report examples that demonstrate unrelated promotions, personal harassment, and uncredited academic work. These are fictional examples for testing the moderation workflow; existing customized posts are not replaced.
+
+On a post's detail page, moderators can edit its title and text, add up to five tags, and lock or unlock comments. Hidden comments can be restored from the Comments page. The queue's AI Moderation switch saves a per-account preference only; it does not automatically review or change posts.
+
+The Home page shows separate containers for the top five most-liked approved posts created today and a post/comment report chart for the past 7 days; Overview shows the report chart for the past 14 days. Report totals remain after a report is dismissed or its content is deleted. Posts show their original posting date, and removed posts show the moderator removal date. Older reports/removals without stored timestamps are identified as unavailable rather than assigned an estimated date.
+
+The top-liked list is ranked by total likes among approved posts created since local midnight.
 
 ## Structure
 

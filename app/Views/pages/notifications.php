@@ -4,6 +4,6 @@
 </div>
 <?php foreach ($notifications as $item): ?>
   <a class="row-item<?= $item['read'] ? '' : ' unread' ?>" href="notifications.php?open=<?= (int)$item['id'] ?>">
-    <span><?= $item['read'] ? '' : '● ' ?><?= h($item['text']) ?></span><small><?= h(ago((int)$item['t'])) ?></small>
+    <span><?php if (!$item['read']): ?><span class="unread-dot" aria-label="Unread"></span><?php endif; ?><?= h($item['text']) ?></span><small><?= h(ago((int)$item['t'])) ?></small>
   </a>
 <?php endforeach; ?>
