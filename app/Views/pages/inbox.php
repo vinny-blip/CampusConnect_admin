@@ -1,9 +1,9 @@
 <?php $isModMail = $box === 'mod'; ?>
-<h2><?= $isModMail ? 'Mod Mail' : 'Messages' ?></h2>
+<h2><?= $isModMail ? 'Moderator Mail' : 'Messages' ?></h2>
 <p class="sub"><?= $isModMail ? 'Conversations between students and the moderator team.' : 'Direct messages with other members.' ?></p>
 <div class="inbox">
   <div class="tlist">
-    <a class="titem new" href="<?= h($page) ?>.php"><?= icon_svg('plus') ?> New <?= $isModMail ? 'mod mail' : 'message' ?></a>
+    <a class="titem new" href="<?= h($page) ?>.php"><?= icon_svg('plus') ?> New <?= $isModMail ? 'moderator mail' : 'message' ?></a>
     <?php foreach ($threads as $thread): ?>
       <?php $lastMessage = $thread['messages'][count($thread['messages']) - 1]; ?>
       <a class="titem<?= ($current['id'] ?? 0) === $thread['id'] ? ' on' : '' ?><?= $thread['unread'] ? ' unread' : '' ?>" href="<?= h($page) ?>.php?t=<?= (int)$thread['id'] ?>">
@@ -30,7 +30,7 @@
         <button class="button primary">Send</button>
       </form>
     <?php else: ?>
-      <h3>New <?= $isModMail ? 'mod mail' : 'message' ?></h3>
+      <h3>New <?= $isModMail ? 'moderator mail' : 'message' ?></h3>
       <form class="form" method="post">
         <?= $csrf ?><input type="hidden" name="action" value="new-message">
         <label for="who">To</label><input id="who" name="who" autocomplete="off" required>

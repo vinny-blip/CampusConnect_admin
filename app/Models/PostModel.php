@@ -760,12 +760,12 @@ final class PostModel extends StateModel
         return $comments;
     }
 
-    public function add(array $data, string $author): array
+    public function add(array $data, string $author, array $communitySlugs): array
     {
         $community = trim((string)($data['community'] ?? ''));
         $title = trim((string)($data['title'] ?? ''));
         $body = trim((string)($data['body'] ?? ''));
-        if (!in_array($community, self::SLUGS, true)) {
+        if (!in_array($community, $communitySlugs, true)) {
             return ['error' => 'Choose a community to post in.'];
         }
         if (mb_strlen($title) < 5) {

@@ -28,9 +28,10 @@
         <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Home</a>
         <a class="<?= $page === 'newest' ? 'on' : '' ?>" href="newest.php"><span class="ico"><?= icon_svg('clock') ?></span>Newest</a>
         <a class="<?= $page === 'control' ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Posts/Feed</a>
-        <h4><a class="<?= $page === 'communities' ? 'on' : '' ?>" href="communities.php">Moderating</a></h4>
+        <h4>Moderating</h4>
+        <a class="<?= $page === 'communities' ? 'on' : '' ?>" href="communities.php"><span class="ico"><?= icon_svg('users') ?></span>Manage Communities</a>
         <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico"><?= icon_svg('queue') ?></span>Queues</a>
-        <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico"><?= icon_svg('mail') ?></span>Mod Mail</a>
+        <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico"><?= icon_svg('mail') ?></span>Mail</a>
         <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico"><?= icon_svg('users') ?></span><span>r/designatmobbin</span></a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>

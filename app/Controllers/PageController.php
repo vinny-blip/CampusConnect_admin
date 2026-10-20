@@ -110,9 +110,9 @@ final class PageController
             }
         }
         if ($this->page === 'post' && isset($_GET['id'])) {
-            $post = $this->posts->get((int)$_GET['id']);
-            if ($post !== null) {
-                $this->posts->markReviewed((int)$post['id']);
+            $reviewPost = $this->posts->get((int)$_GET['id']);
+            if ($reviewPost !== null) {
+                $this->posts->markReviewed((int)$reviewPost['id']);
             }
         }
 
@@ -212,7 +212,7 @@ final class PageController
                 'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post',
             ],
             'create' => ['create-post'],
-            'communities' => ['star', 'leave', 'Alumni', 'Advisor'],
+            'communities' => ['star', 'leave', 'Alumni', 'Advisor', 'create-community'],
             'modmail', 'messages' => ['reply', 'new-message'],
             'notifications' => ['read-all'],
             'profile' => ['update-name', 'reset'],
@@ -442,7 +442,8 @@ final class PageController
         }
         $postData = $_POST;
         $postData['image'] = $image;
-        $result = $this->posts->add($postData, $this->user['name']);
+        $communitySlugs = array_column($this->communities->list(), 'slug');
+        $result = $this->posts->add($postData, $this->user['name'], $communitySlugs);
         if (isset($result['error'])) {
             $this->flash($result['error'], 'error');
         } else {
@@ -453,6 +454,12 @@ final class PageController
 
     private function handleCommunityAction(string $action): void
     {
+        if ($action === 'create-community') {
+            $result = $this->communities->create((string)($_POST['community_name'] ?? ''));
+            $this->flash($result['error'] ?? 'Community created.', isset($result['error']) ? 'error' : 'success');
+            return;
+        }
+
         $slug = (string)($_POST['slug'] ?? '');
         $name = $this->communities->name($slug);
         if ($action === 'star' || $action === 'leave' || in_array($action, ['Alumni', 'Advisor'], true)) {

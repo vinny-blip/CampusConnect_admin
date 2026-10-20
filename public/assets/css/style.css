@@ -38,7 +38,7 @@ button{font:inherit;cursor:pointer}
 .sidebar a:hover,.sidebar a.on{background:#e3e3e8}
 .sidebar .community-nav{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:.78rem}
 .sidebar .community-nav .ico{flex:none;margin-right:0}
-.sidebar h4{margin:24px 8px 4px;font-size:.75rem;font-weight:500}
+.sidebar h4{margin:24px 8px 4px;font-size:.75rem;font-weight:700}
 .main{flex:1;min-width:0;background:#efefef;display:flex;flex-direction:column;min-height:0}
 .tabs{display:flex;gap:44px;padding:18px 36px 0;font-size:.8rem}
 .tabs span{padding-bottom:6px}
@@ -94,8 +94,6 @@ button{font:inherit;cursor:pointer}
 .avatar.sm{width:22px;height:22px;font-size:.6rem}
 .avatar.big{width:56px;height:56px;font-size:1rem}
 .sidebar a .ico{display:inline-grid;place-items:center;width:30px;height:30px;margin-right:8px;border:1.5px solid var(--ink);border-radius:50%;font-size:.95rem}
-.sidebar h4 a{padding:0}
-.sidebar h4 a.on{font-weight:700}
 .logout{margin-top:auto;background:none;border:0;text-align:left;padding:6px 8px;color:var(--ink);font-size:.85rem;border-radius:6px}
 .logout:hover{background:#e3e3e8}
 .sidebar .about-nav{margin-top:auto}

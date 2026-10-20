@@ -45,6 +45,42 @@ final class CommunityModel extends StateModel
         ));
     }
 
+    public function create(string $name): array
+    {
+        $name = trim((string)preg_replace('/\s+/u', ' ', $name));
+        if (mb_strlen($name) < 3 || mb_strlen($name) > 60) {
+            return ['error' => 'Community name must be between 3 and 60 characters.'];
+        }
+
+        $slug = trim((string)preg_replace('/[^\pL\pN]+/u', '-', mb_strtolower($name)), '-');
+        if ($slug === '') {
+            return ['error' => 'Choose a name with letters or numbers.'];
+        }
+
+        $all = $this->all();
+        $moderatedCount = count(array_filter($all, static fn($community) => $community['mod']));
+        if ($moderatedCount >= 5) {
+            return ['error' => 'You can moderate up to 5 communities. Leave one before creating another.'];
+        }
+        foreach ($all as $community) {
+            if (mb_strtolower($community['name']) === mb_strtolower($name) || $community['slug'] === $slug) {
+                return ['error' => 'A community with that name already exists.'];
+            }
+        }
+
+        $all[] = [
+            'slug' => $slug,
+            'name' => $name,
+            'visitors' => '0',
+            'contrib' => 0,
+            'starred' => false,
+            'mod' => true,
+            'request' => null,
+        ];
+        $this->save(self::KEY, $all);
+        return [];
+    }
+
     public function change(string $slug, string $action): void
     {
         $all = $this->all();
