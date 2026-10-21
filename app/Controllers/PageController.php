@@ -316,9 +316,6 @@ final class PageController
 
     private function handleQueueAction(string $action): void
     {
-        if ($action === 'toggle-ai-moderation') {
-            $this->requireAdminForAiReview(true);
-        }
         $postId = (int)($_POST['post_id'] ?? 0);
         $commentId = (int)($_POST['comment_id'] ?? 0);
         if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {

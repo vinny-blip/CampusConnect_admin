@@ -20,19 +20,15 @@
     <button class="button" type="submit">Search</button>
   </form>
   <div class="queue-status">
-    <?php if (($user['role'] ?? '') === 'admin'): ?>
-      <form class="ai-moderation-form" method="post">
-        <?= $csrf ?>
-        <input type="hidden" name="action" value="toggle-ai-moderation">
-        <input type="hidden" name="enabled" value="<?= $aiModerationEnabled ? '0' : '1' ?>">
-        <button class="ai-moderation-toggle<?= $aiModerationEnabled ? ' enabled' : '' ?>" type="submit" aria-pressed="<?= $aiModerationEnabled ? 'true' : 'false' ?>">
-          <span><?= $aiModerationEnabled ? 'AI Moderation is on' : 'Turn on AI Moderation' ?></span>
-          <span class="ai-switch" aria-hidden="true"><span></span></span>
-        </button>
-      </form>
-    <?php else: ?>
-      <span class="sub">AI moderation setting managed by admin.</span>
-    <?php endif; ?>
+    <form class="ai-moderation-form" method="post">
+      <?= $csrf ?>
+      <input type="hidden" name="action" value="toggle-ai-moderation">
+      <input type="hidden" name="enabled" value="<?= $aiModerationEnabled ? '0' : '1' ?>">
+      <button class="ai-moderation-toggle<?= $aiModerationEnabled ? ' enabled' : '' ?>" type="submit" aria-pressed="<?= $aiModerationEnabled ? 'true' : 'false' ?>">
+        <span><?= $aiModerationEnabled ? 'AI Moderation is on' : 'Turn on AI Moderation' ?></span>
+        <span class="ai-switch" aria-hidden="true"><span></span></span>
+      </button>
+    </form>
     <span class="count"><?= count($posts) + count($reportedComments) + count($aiReviewComments) ?> items shown</span>
   </div>
 </nav>
