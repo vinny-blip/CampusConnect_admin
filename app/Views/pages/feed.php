@@ -4,7 +4,11 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
 <?php if ($about !== null): ?>
   <div class="about">
     <span class="cicon big"></span>
-    <div><h2><?= h($about['name']) ?></h2><p class="sub"><?= h($about['visitors']) ?> visitors • <?= (int)$about['contrib'] ?> contributions past week</p></div>
+    <div>
+      <h2><?= h($about['name']) ?></h2>
+      <?php if (!empty($about['description'])): ?><p class="sub"><?= h($about['description']) ?></p><?php endif; ?>
+      <p class="sub"><?= h($about['visitors']) ?> visitors • <?= (int)$about['contrib'] ?> contributions past week<?= !empty($about['category']) ? ' • ' . h($about['category']) : '' ?></p>
+    </div>
     <a class="button" href="communities.php">Manage</a>
   </div>
 <?php else: ?>
@@ -55,9 +59,14 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
         <div class="meta">
           <span class="avatar sm"><?= h(mb_strtoupper(mb_substr($post['author'], 0, 1))) ?></span>
           <a href="<?= h(community_url($post['community'])) ?>"><b><?= h($post['cname']) ?></b></a>
-          <span>• <?= h($post['author']) ?></span><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_label((int)$post['created'])) ?></time>
+          <span>• <?= h($post['author']) ?></span>
+          <?php if ($mode === 'newest' && $post['approvedAt'] !== null): ?>
+            <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?> · <?= h(ago((int)$post['approvedAt'])) ?> ago</time>
+          <?php else: ?>
+            <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
+          <?php endif; ?>
           <?php if ($post['status'] === 'removed'): ?>
-            <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_label((int)$post['removedAt'])) ?></time>
+            <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_time_label((int)$post['removedAt'])) ?></time>
             <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
           <?php endif; ?>
           <?php if ($post['pinned']): ?><span class="tag"><?= icon_svg('pin') ?> Pinned</span><?php endif; ?>
@@ -80,7 +89,6 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
           <?php else: ?>
             <?php post_action($csrf, 'like', (int)$post['id'], (string)$post['likes'], 'chip', false, $post['liked'] ? 'heart-filled' : 'heart'); ?>
             <a class="chip" href="post.php?id=<?= (int)$post['id'] ?>"><?= icon_svg('message') ?> <?= (int)$post['commentCount'] ?></a>
-            <?php post_action($csrf, 'save', (int)$post['id'], $post['saved'] ? 'Saved' : 'Save', 'chip', false, 'bookmark'); ?>
             <?php if (in_array($mode, ['posts', 'search'], true) && $post['status'] === 'pending'): ?><a class="chip ok" href="<?= $postUrl ?>">Review</a><?php endif; ?>
           <?php endif; ?>
         </div>

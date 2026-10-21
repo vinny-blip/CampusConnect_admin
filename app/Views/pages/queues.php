@@ -42,13 +42,16 @@
           <span class="avatar sm"><?= h(mb_strtoupper(mb_substr($post['author'], 0, 1))) ?></span>
           <b><?= h($post['author']) ?></b>
           <span>• <a href="<?= h(community_url($post['community'])) ?>"><?= h($post['cname']) ?></a></span>
-          <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_label((int)$post['created'])) ?></time>
+          <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
+          <?php if ($post['status'] === 'approved' && $post['approvedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?></time><?php endif; ?>
           <?php if ($post['status'] === 'removed'): ?>
-            <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_label((int)$post['removedAt'])) ?></time>
+            <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_time_label((int)$post['removedAt'])) ?></time>
             <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
           <?php endif; ?>
-          <span>• <?= (int)$post['likes'] ?> likes</span>
-          <span>• <?= (int)$post['commentCount'] ?> comments</span>
+          <?php if ($post['status'] === 'approved'): ?>
+            <span>• <?= (int)$post['likes'] ?> likes</span>
+            <span>• <?= (int)$post['commentCount'] ?> comments</span>
+          <?php endif; ?>
           <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?><?= $post['reportedAt'] !== null ? ' on ' . h(date_label((int)$post['reportedAt'])) : '' ?></span><?php endif; ?>
           <?php if ($post['locked']): ?><span class="tag">Comments locked</span><?php endif; ?>
         </div>

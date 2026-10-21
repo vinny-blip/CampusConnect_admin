@@ -1,12 +1,8 @@
 <h2>Manage Moderated Communities</h2>
-<p class="sub">You can moderate up to 5 communities. <a href="#roles">Learn more about moderator roles.</a></p>
-<?php if ($communityCount >= 5): ?><p class="sub">You’re at the limit. Leave a community before creating another.</p><?php endif; ?>
-<form class="form inline" method="post">
-  <?= $csrf ?><input type="hidden" name="action" value="create-community">
-  <input name="community_name" maxlength="60" placeholder="New community name" aria-label="New community name" required<?= $communityCount >= 5 ? ' disabled' : '' ?>>
-  <button class="button primary" type="submit"<?= $communityCount >= 5 ? ' disabled' : '' ?>>Create Community</button>
-</form>
-<h3 class="chead">Communities (<?= (int)$communityCount ?>/5)</h3>
+<p class="sub">You can moderate up to 10 communities. <a href="#roles">Learn more about moderator roles.</a></p>
+<?php if ($communityCount >= 10): ?><p class="sub">You’re at the limit. Leave a community before creating another.</p>
+<?php else: ?><p><a class="button primary" href="create-community.php">Create Community</a></p><?php endif; ?>
+<h3 class="chead">Communities (<?= (int)$communityCount ?>/10)</h3>
 <?php if ($communities): ?>
   <?php foreach ($communities as $community): ?>
     <div class="crow">
@@ -35,5 +31,5 @@
   <h3 class="chead">Moderator roles</h3>
   <p><b>Moderator</b> checks the queues and keeps the feed tidy.</p>
   <p><b>Alumni</b> advises current moderators from experience and can help with mod mail.</p>
-  <p><b>Advisor</b> is a faculty or staff member who oversees a community. You can moderate up to 5 communities at once.</p>
+  <p><b>Advisor</b> is a faculty or staff member who oversees a community. You can moderate up to 10 communities at once.</p>
 </div>

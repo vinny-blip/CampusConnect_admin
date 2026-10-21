@@ -13,7 +13,7 @@ CampusConnect is a PHP MVC moderator dashboard that runs on XAMPP. It uses MySQL
 
 The demo account is `mod@campus.edu.ph` / `mod12345`. The dashboard and demo login both work without a MySQL server. Demo data is created the first time each account visits the app. Passwords are hashed; each account has its own app data.
 
-The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@usls.edu.ph`. That account must be registered and is the only account treated as an admin; other accounts are moderators. Only the admin can open the Restricted page, where restrictions are stored globally and prevent the selected moderator account from creating posts or comments. The app creates the restrictions table automatically for SQLite and MySQL; `config/database.sql` also defines it for fresh MySQL installs.
+The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@usls.edu.ph`. That account must be registered and is the only account treated as an admin; other accounts are moderators. Moderators can manage up to 10 communities and create one with a name, category, and description. Only the admin can open the Restricted page, where restrictions are stored globally and prevent the selected moderator account from creating posts or comments. The app creates the restrictions table automatically for SQLite and MySQL; `config/database.sql` also defines it for fresh MySQL installs.
 
 ## Pages
 
@@ -24,7 +24,7 @@ The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@u
 | Control Posts/Feed | `control.php` |
 | Queues | `queues.php` (`dashboard.php` forwards here) |
 | Mod Mail / Messages | `modmail.php`, `messages.php` |
-| Communities | `designatmobbin.php`, `community.php?c=slug`, `communities.php` |
+| Communities | `designatmobbin.php`, `community.php?c=slug`, `communities.php`, `create-community.php` |
 | About Us | `about.php` |
 | FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
@@ -33,11 +33,11 @@ The admin account is selected by `CC_ADMIN_EMAIL`, which defaults to `s2300416@u
 
 ## Reporting and moderation
 
-Students can report posts and comments as non-academic, toxic or harassing, plagiarized, or another guideline violation. Reported posts and comments appear in **Queues → Reported** for moderator review. Moderators can dismiss reports, approve pending posts, hide posts or comments, and permanently delete reported content.
+Users report posts and comments through the mobile app as non-academic, toxic or harassing, plagiarized, or another guideline violation. Reported posts and comments appear in **Queues → Reported** for web moderators to review. Moderators can dismiss reports, approve pending posts, hide posts or comments, and permanently delete reported content.
 
 Demo data includes report examples that demonstrate unrelated promotions, personal harassment, and uncredited academic work. These are fictional examples for testing the moderation workflow; existing customized posts are not replaced.
 
-On a post's detail page, moderators can edit its title and text, add up to five tags, and lock or unlock comments. Hidden comments can be restored from the Comments page. Any student moderator can toggle the globally shared AI Moderation setting, which calls OpenAI's Moderation API for submitted text and supported images. Flagged posts stay pending and flagged comments stay hidden until the admin reviews them; API errors also hold content for review. The AI never removes content. Enabling this feature sends submission text and supported images to OpenAI, so disclose this in the student privacy notice. The API does not determine academic relevance or plagiarism, so those guidelines still require other checks and human review.
+On a post's detail page, moderators can edit its title and text, add up to five tags, lock or unlock comments, and permanently delete comments. Hidden comments can be restored from the Comments page. Any student moderator can toggle the globally shared AI Moderation setting, which calls OpenAI's Moderation API for submitted text and supported images. Flagged posts stay pending and flagged comments stay hidden until the admin reviews them; API errors also hold content for review. The AI never removes content. Enabling this feature sends submission text and supported images to OpenAI, so disclose this in the student privacy notice. The API does not determine academic relevance or plagiarism, so those guidelines still require other checks and human review.
 
 The Home page shows separate containers for the top five most-liked approved posts created today and a post/comment report chart for the past 7 days; Overview shows the report chart for the past 14 days. Report totals remain after a report is dismissed or its content is deleted. Posts show their original posting date, and removed posts show the moderator removal date. Older reports/removals without stored timestamps are identified as unavailable rather than assigned an estimated date.
 

@@ -45,11 +45,19 @@ final class CommunityModel extends StateModel
         ));
     }
 
-    public function create(string $name): array
+    public function create(string $name, string $description, string $category): array
     {
         $name = trim((string)preg_replace('/\s+/u', ' ', $name));
+        $description = trim($description);
+        $category = trim($category);
         if (mb_strlen($name) < 3 || mb_strlen($name) > 60) {
             return ['error' => 'Community name must be between 3 and 60 characters.'];
+        }
+        if ($description === '' || mb_strlen($description) > 500) {
+            return ['error' => 'Add a community description of up to 500 characters.'];
+        }
+        if (!in_array($category, ['Academic Department', 'Course or Subject', 'Student Organization', 'Other'], true)) {
+            return ['error' => 'Choose a valid community category.'];
         }
 
         $slug = trim((string)preg_replace('/[^\pL\pN]+/u', '-', mb_strtolower($name)), '-');
@@ -59,8 +67,8 @@ final class CommunityModel extends StateModel
 
         $all = $this->all();
         $moderatedCount = count(array_filter($all, static fn($community) => $community['mod']));
-        if ($moderatedCount >= 5) {
-            return ['error' => 'You can moderate up to 5 communities. Leave one before creating another.'];
+        if ($moderatedCount >= 10) {
+            return ['error' => 'You can moderate up to 10 communities. Leave one before creating another.'];
         }
         foreach ($all as $community) {
             if (mb_strtolower($community['name']) === mb_strtolower($name) || $community['slug'] === $slug) {
@@ -71,6 +79,8 @@ final class CommunityModel extends StateModel
         $all[] = [
             'slug' => $slug,
             'name' => $name,
+            'description' => $description,
+            'category' => $category,
             'visitors' => '0',
             'contrib' => 0,
             'starred' => false,

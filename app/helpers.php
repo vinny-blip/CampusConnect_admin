@@ -23,6 +23,11 @@ function date_label(int $timestamp): string
     return date('M j, Y', intdiv($timestamp, 1000));
 }
 
+function date_time_label(int $timestamp): string
+{
+    return date('M j, Y g:i A', intdiv($timestamp, 1000));
+}
+
 function initials(string $name): string
 {
     $words = preg_split('/\s+/', trim($name)) ?: [];

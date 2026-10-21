@@ -204,7 +204,7 @@ final class PageController
                 => ['like', 'save', 'pin', 'restore', 'remove'],
             'post' => [
                 'approve', 'remove', 'save', 'like-comment', 'heart-comment', 'comment',
-                'report-post', 'report-comment', 'clear-post-report', 'clear-comment-report',
+                'clear-post-report', 'clear-comment-report',
                 'delete-comment', 'hide-comment', 'restore-comment', 'delete-post', 'edit-post', 'toggle-lock',
             ],
             'queues' => [
@@ -212,12 +212,13 @@ final class PageController
                 'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post', 'approve-ai-comment',
             ],
             'create' => ['create-post'],
-            'communities' => ['star', 'leave', 'Alumni', 'Advisor', 'create-community'],
+            'communities' => ['star', 'leave', 'Alumni', 'Advisor'],
+            'create-community' => ['create-community'],
             'modmail', 'messages' => ['reply', 'new-message'],
             'notifications' => ['read-all'],
             'profile' => ['update-name', 'reset'],
             'restricted' => ['restrict', 'unrestrict'],
-            'comments' => ['delete-comment', 'report-comment', 'clear-comment-report', 'hide-comment', 'restore-comment'],
+            'comments' => ['delete-comment', 'clear-comment-report', 'hide-comment', 'restore-comment'],
             default => [],
         };
         if (!in_array($action, $allowedActions, true)) {
@@ -265,6 +266,18 @@ final class PageController
             case 'communities':
                 $this->handleCommunityAction($action);
                 break;
+            case 'create-community':
+                $result = $this->communities->create(
+                    (string)($_POST['community_name'] ?? ''),
+                    (string)($_POST['community_description'] ?? ''),
+                    (string)($_POST['community_category'] ?? '')
+                );
+                if (isset($result['error'])) {
+                    $this->flash($result['error'], 'error');
+                    $this->redirect('create-community.php');
+                }
+                $this->flash('Community created.');
+                $this->redirect('communities.php');
             case 'modmail':
             case 'messages':
                 $this->handleInboxAction($action);
@@ -395,15 +408,9 @@ final class PageController
             if ($deleted) {
                 $this->redirect(isset($_GET['review']) ? 'queues.php?tab=reported' : 'home.php');
             }
-        } elseif ($action === 'report-post') {
-            $result = $this->posts->reportPost($id, (string)($_POST['reason'] ?? ''));
-            $this->flash($result['error'] ?? 'Post reported for moderator review.', isset($result['error']) ? 'error' : 'success');
         } elseif ($action === 'clear-post-report') {
             $cleared = $this->posts->clearPostReport($id);
             $this->flash($cleared ? 'Post report dismissed.' : 'Post report was already cleared.', $cleared ? 'success' : 'error');
-        } elseif ($action === 'report-comment') {
-            $result = $this->posts->reportComment($id, $commentId, (string)($_POST['reason'] ?? ''));
-            $this->flash($result['error'] ?? 'Comment reported for moderator review.', isset($result['error']) ? 'error' : 'success');
         } elseif ($action === 'clear-comment-report') {
             $cleared = $this->posts->clearCommentReport($id, $commentId);
             $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
@@ -464,9 +471,6 @@ final class PageController
                 ? $this->posts->approveAiComment($postId, $commentId)
                 : $this->posts->hideComment($postId, $commentId, $hidden);
             $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
-        } elseif ($action === 'report-comment') {
-            $result = $this->posts->reportComment($postId, $commentId, (string)($_POST['reason'] ?? ''));
-            $this->flash($result['error'] ?? 'Comment reported for moderator review.', isset($result['error']) ? 'error' : 'success');
         } elseif ($action === 'clear-comment-report') {
             $cleared = $this->posts->clearCommentReport($postId, $commentId);
             $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
@@ -529,12 +533,6 @@ final class PageController
 
     private function handleCommunityAction(string $action): void
     {
-        if ($action === 'create-community') {
-            $result = $this->communities->create((string)($_POST['community_name'] ?? ''));
-            $this->flash($result['error'] ?? 'Community created.', isset($result['error']) ? 'error' : 'success');
-            return;
-        }
-
         $slug = (string)($_POST['slug'] ?? '');
         $name = $this->communities->name($slug);
         if ($action === 'star' || $action === 'leave' || in_array($action, ['Alumni', 'Advisor'], true)) {
@@ -642,6 +640,8 @@ final class PageController
             $data['reportCountsByDate'] = $this->posts->reportCountsByDate();
         } elseif ($this->page === 'communities') {
             $data['communityCount'] = count($data['communities']);
+        } elseif ($this->page === 'create-community') {
+            $data['communityCount'] = count($data['communities']);
         } elseif (in_array($this->page, ['modmail', 'messages'], true)) {
             $box = $this->page === 'modmail' ? 'mod' : 'dm';
             $currentId = (int)($_GET['t'] ?? 0);
@@ -675,7 +675,7 @@ final class PageController
         $slug = trim((string)($_GET['c'] ?? 'designatmobbin'));
         $config = [
             'home' => ['Home', 'Approved posts from the communities you moderate.', 'home'],
-            'newest' => ['Newest', 'The latest approved posts, newest first.', 'newest'],
+            'newest' => ['Newest', 'The most recently approved posts first.', 'newest'],
             'posts' => ['Posts', 'Every post across your communities. Filter by status.', 'posts'],
             'control' => ['Control Posts/Feed', 'Pin or remove posts in the feed. Pending posts have to be checked in the queue first.', 'control'],
             'saved' => ['Saved', 'Posts you saved for later.', 'saved'],
@@ -690,7 +690,7 @@ final class PageController
         if ($this->page === 'home') {
             $posts = $this->posts->find('approved', null, '', null, 'hot');
         } elseif ($this->page === 'newest') {
-            $posts = $this->posts->find('approved');
+            $posts = $this->posts->find('approved', null, '', null, 'approved');
         } elseif ($this->page === 'posts' || $this->page === 'control') {
             $posts = $this->posts->find($status ?: null);
         } elseif ($this->page === 'saved') {

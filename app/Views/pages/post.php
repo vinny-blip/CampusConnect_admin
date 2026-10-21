@@ -5,9 +5,10 @@
   <div class="review">
     <span class="tag <?= h($post['status']) ?>"><?= h($post['status']) ?></span>
     <a href="<?= h(community_url($post['community'])) ?>"><b><?= h($post['cname']) ?></b></a>
-    <span>• <?= h($post['author']) ?></span><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_label((int)$post['created'])) ?></time>
+    <span>• <?= h($post['author']) ?></span><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
+    <?php if ($post['status'] === 'approved' && $post['approvedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?></time><?php endif; ?>
     <?php if ($post['status'] === 'removed'): ?>
-      <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_label((int)$post['removedAt'])) ?></time>
+      <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_time_label((int)$post['removedAt'])) ?></time>
       <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
     <?php endif; ?>
     <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?><?= $post['reportedAt'] !== null ? ' on ' . h(date_label((int)$post['reportedAt'])) : '' ?></span><?php endif; ?>
@@ -48,26 +49,15 @@
   </details>
   <div class="detail">
     <div>
-      <div class="media"><img src="<?= h($post['image']) ?>" alt="Image attached to <?= h($post['author']) ?>'s post"></div>
       <div class="cap">
-        <?php post_action($csrf, 'save', (int)$post['id'], '', 'bookmark', false, $post['saved'] ? 'bookmark-filled' : 'bookmark'); ?>
-        <span><?= h($post['title']) ?></span>
+        <div class="post-author">
+          <span>Posted by <?= h($post['author']) ?></span>
+          <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>"><?= h(date_time_label((int)$post['created'])) ?> · <?= h(ago((int)$post['created'])) ?> ago</time>
+        </div>
+        <h2><?= h($post['title']) ?></h2>
       </div>
+      <div class="media"><img src="<?= h($post['image']) ?>" alt="Image attached to <?= h($post['author']) ?>'s post"></div>
       <?php if ($post['tags']): ?><div class="post-tags"><?php foreach ($post['tags'] as $tag): ?><span class="tag"><?= h($tag) ?></span><?php endforeach; ?></div><?php endif; ?>
-      <?php if (!$post['reported'] && $post['status'] !== 'removed'): ?>
-        <details class="report-control">
-          <summary>Report post</summary>
-          <form class="report-form" method="post">
-            <?= $csrf ?><input type="hidden" name="action" value="report-post">
-            <label for="post-report-reason">Reason</label>
-            <select id="post-report-reason" name="reason" required>
-              <option value="">Choose a reason</option>
-              <?php foreach (report_reason_options() as $reason): ?><option value="<?= h($reason) ?>"><?= h($reason) ?></option><?php endforeach; ?>
-            </select>
-            <button class="button" type="submit">Submit report</button>
-          </form>
-        </details>
-      <?php endif; ?>
     </div>
     <aside class="cbox">
       <b><?= icon_svg('message') ?> Comments (<?= count($post['commentList']) ?>)</b>
@@ -88,29 +78,21 @@
               <div class="comment-moderation">
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="clear-comment-report"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Dismiss report</button></form>
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="hide-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Hide comment</button></form>
-                <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="delete-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn danger-text">Delete comment</button></form>
               </div>
-            <?php elseif ($post['status'] !== 'removed'): ?>
-              <details class="report-control">
-                <summary>Report comment</summary>
-                <form class="report-form" method="post">
-                  <?= $csrf ?><input type="hidden" name="action" value="report-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>">
-                  <label for="comment-report-<?= (int)$comment['id'] ?>">Reason</label>
-                  <select id="comment-report-<?= (int)$comment['id'] ?>" name="reason" required>
-                    <option value="">Choose a reason</option>
-                    <?php foreach (report_reason_options() as $reason): ?><option value="<?= h($reason) ?>"><?= h($reason) ?></option><?php endforeach; ?>
-                  </select>
-                  <button class="button" type="submit">Submit report</button>
-                </form>
-              </details>
             <?php endif; ?>
-            <?php if (!$comment['hidden']): ?>
-              <div class="rx">
+            <div class="rx">
+              <?php if (!$comment['hidden']): ?>
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="like-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button><?= icon_svg('thumb-up') ?> <?= (int)$comment['likes'] ?></button></form>
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="heart-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button><?= icon_svg('heart') ?> <?= (int)$comment['hearts'] ?></button></form>
                 <?php if (!$post['locked'] && $post['status'] === 'approved'): ?><a href="post.php?id=<?= (int)$post['id'] ?>&amp;reply=<?= rawurlencode($comment['author']) ?>#comment-form">Reply</a><?php endif; ?>
-              </div>
-            <?php endif; ?>
+              <?php endif; ?>
+              <?php if (!$comment['aiNeedsReview'] || ($user['role'] ?? '') === 'admin'): ?>
+                <form class="inline-action" method="post" onsubmit="return confirm('Permanently delete this comment?')">
+                  <?= $csrf ?><input type="hidden" name="action" value="delete-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>">
+                  <button class="linkbtn danger-text" type="submit">Remove</button>
+                </form>
+              <?php endif; ?>
+            </div>
           </div>
         <?php endforeach; else: ?><p class="empty">No comments yet.</p><?php endif; ?>
       </div>

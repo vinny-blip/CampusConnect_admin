@@ -96,6 +96,7 @@ final class PostModel extends StateModel
                     : 'Posted by a student. Replies and notes from classmates are welcome in the comments.'),
                 'image' => $this->art($i),
                 'created' => $created,
+                'approvedAt' => $status === 'approved' ? $created : null,
                 'removedAt' => null,
                 'likes' => ($i * 7) % 45 + 3,
                 'liked' => false,
@@ -227,6 +228,15 @@ final class PostModel extends StateModel
         $post['aiCategories'] = is_array($post['aiCategories'] ?? null) ? $post['aiCategories'] : [];
         $post['aiReviewError'] = (bool)($post['aiReviewError'] ?? false);
         $post['removedAt'] = isset($post['removedAt']) ? (int)$post['removedAt'] : null;
+        $post['approvedAt'] = isset($post['approvedAt']) ? (int)$post['approvedAt'] : null;
+        if ($post['status'] === 'approved' && $post['approvedAt'] === null) {
+            foreach ($this->load(self::LOG, static fn() => []) as $entry) {
+                if ((int)($entry['postId'] ?? 0) === (int)$post['id'] && ($entry['action'] ?? '') === 'Approved') {
+                    $post['approvedAt'] = (int)$entry['t'];
+                    break;
+                }
+            }
+        }
         if ($post['status'] === 'removed' && $post['removedAt'] === null) {
             foreach ($this->load(self::LOG, static fn() => []) as $entry) {
                 if ((int)($entry['postId'] ?? 0) === (int)$post['id'] && ($entry['action'] ?? '') === 'Removed') {
@@ -275,7 +285,20 @@ final class PostModel extends StateModel
                     . $post['author'] . ' ' . $post['community']
                 ), $query));
         });
-        usort($posts, static function ($a, $b) use ($sort): int {
+        $approvalTimes = [];
+        if ($sort === 'approved') {
+            foreach ($this->load(self::LOG, static fn() => []) as $entry) {
+                if (($entry['action'] ?? '') === 'Approved') {
+                    $approvalTimes[(int)$entry['postId']] = (int)$entry['t'];
+                }
+            }
+        }
+        usort($posts, static function ($a, $b) use ($sort, $approvalTimes): int {
+            if ($sort === 'approved') {
+                $aTime = (int)($a['approvedAt'] ?? $approvalTimes[(int)$a['id']] ?? 0);
+                $bTime = (int)($b['approvedAt'] ?? $approvalTimes[(int)$b['id']] ?? 0);
+                return ($bTime ?: (int)$b['created']) <=> ($aTime ?: (int)$a['created']);
+            }
             $pin = (int)$b['pinned'] <=> (int)$a['pinned'];
             if ($pin !== 0) {
                 return $pin;
@@ -495,13 +518,15 @@ final class PostModel extends StateModel
             if ($post['status'] === 'pending' && !$post['reviewed']) {
                 return ['error' => 'Open and check this post before you approve or remove it.'];
             }
+            $statusChangedAt = (int)(microtime(true) * 1000);
             $post['status'] = $status;
+            $post['approvedAt'] = $status === 'approved' ? $statusChangedAt : ($post['approvedAt'] ?? null);
             $post['aiNeedsReview'] = false;
             $post['aiReviewError'] = false;
             $post['reported'] = false;
             $post['reportReason'] = '';
             $post['reportedAt'] = null;
-            $post['removedAt'] = $status === 'removed' ? (int)(microtime(true) * 1000) : null;
+            $post['removedAt'] = $status === 'removed' ? $statusChangedAt : null;
             if ($status === 'removed') {
                 $post['pinned'] = false;
             }
@@ -633,6 +658,9 @@ final class PostModel extends StateModel
     public function toggleLike(int $id): void
     {
         $this->update($id, static function (&$post): void {
+            if ($post['status'] !== 'approved') {
+                return;
+            }
             $post['liked'] = !$post['liked'];
             $post['likes'] += $post['liked'] ? 1 : -1;
         });
@@ -886,6 +914,7 @@ final class PostModel extends StateModel
         $posts = $this->all();
         $ids = array_column($posts, 'id');
         $id = $ids ? max($ids) + 1 : 1;
+        $created = (int)(microtime(true) * 1000);
         $posts[] = [
             'id' => $id,
             'author' => $author,
@@ -893,7 +922,8 @@ final class PostModel extends StateModel
             'title' => $title,
             'body' => $body,
             'image' => (string)($data['image'] ?? '') ?: $this->art($id),
-            'created' => (int)(microtime(true) * 1000),
+            'created' => $created,
+            'approvedAt' => $aiNeedsReview ? null : $created,
             'removedAt' => null,
             'likes' => 0,
             'liked' => false,

@@ -22,6 +22,9 @@ switch ($page):
     case 'communities':
         require __DIR__ . '/pages/communities.php';
         break;
+    case 'create-community':
+        require __DIR__ . '/pages/create-community.php';
+        break;
     case 'create':
         require __DIR__ . '/pages/create.php';
         break;
