@@ -222,6 +222,10 @@ final class PostModel extends StateModel
         $post['reported'] = (bool)($post['reported'] ?? false);
         $post['reportReason'] = (string)($post['reportReason'] ?? '');
         $post['reportedAt'] = isset($post['reportedAt']) ? (int)$post['reportedAt'] : null;
+        $post['aiFlagged'] = (bool)($post['aiFlagged'] ?? false);
+        $post['aiNeedsReview'] = (bool)($post['aiNeedsReview'] ?? false);
+        $post['aiCategories'] = is_array($post['aiCategories'] ?? null) ? $post['aiCategories'] : [];
+        $post['aiReviewError'] = (bool)($post['aiReviewError'] ?? false);
         $post['removedAt'] = isset($post['removedAt']) ? (int)$post['removedAt'] : null;
         if ($post['status'] === 'removed' && $post['removedAt'] === null) {
             foreach ($this->load(self::LOG, static fn() => []) as $entry) {
@@ -238,6 +242,10 @@ final class PostModel extends StateModel
             $comment['reportReason'] = (string)($comment['reportReason'] ?? '');
             $comment['reportedAt'] = isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null;
             $comment['hidden'] = (bool)($comment['hidden'] ?? false);
+            $comment['aiFlagged'] = (bool)($comment['aiFlagged'] ?? false);
+            $comment['aiNeedsReview'] = (bool)($comment['aiNeedsReview'] ?? false);
+            $comment['aiCategories'] = is_array($comment['aiCategories'] ?? null) ? $comment['aiCategories'] : [];
+            $comment['aiReviewError'] = (bool)($comment['aiReviewError'] ?? false);
         }
         unset($comment);
         $post['commentCount'] = count($post['commentList']);
@@ -281,18 +289,47 @@ final class PostModel extends StateModel
 
     public function queue(string $kind, string $query = ''): array
     {
-        return $kind === 'reported'
-            ? $this->find(null, null, $query, true)
-            : $this->find('pending', null, $query, false);
+        if ($kind === 'reported') {
+            return $this->find(null, null, $query, true);
+        }
+        if ($kind !== 'ai') {
+            return array_values(array_filter(
+                $this->find('pending', null, $query, false),
+                static fn($post) => empty($post['aiNeedsReview'])
+            ));
+        }
+
+        $query = mb_strtolower(trim($query));
+        $posts = array_filter($this->all(), static fn($post) =>
+            !empty($post['aiNeedsReview'])
+            && ($query === '' || str_contains(mb_strtolower(
+                $post['title'] . ' ' . $post['body'] . ' ' . $post['author'] . ' ' . $post['community']
+            ), $query))
+        );
+        usort($posts, static fn($a, $b) => $b['created'] <=> $a['created']);
+        return array_map(fn($post) => $this->enrich($post), array_values($posts));
     }
 
     public function reportedComments(string $query = ''): array
+    {
+        return $this->commentQueueItems($query, false);
+    }
+
+    public function aiReviewComments(string $query = ''): array
+    {
+        return $this->commentQueueItems($query, true);
+    }
+
+    private function commentQueueItems(string $query, bool $aiReviewOnly): array
     {
         $query = mb_strtolower(trim($query));
         $comments = [];
         foreach ($this->all() as $post) {
             foreach ($post['commentList'] as $comment) {
-                if (empty($comment['reported'])) {
+                $needsReview = $aiReviewOnly
+                    ? !empty($comment['aiNeedsReview'])
+                    : !empty($comment['reported']);
+                if (!$needsReview) {
                     continue;
                 }
                 if ($query !== '' && !str_contains(mb_strtolower(
@@ -312,6 +349,11 @@ final class PostModel extends StateModel
                     'created' => (int)$comment['created'],
                     'reportReason' => (string)($comment['reportReason'] ?? ''),
                     'reportedAt' => isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null,
+                    'reported' => (bool)($comment['reported'] ?? false),
+                    'aiFlagged' => (bool)($comment['aiFlagged'] ?? false),
+                    'aiNeedsReview' => (bool)($comment['aiNeedsReview'] ?? false),
+                    'aiCategories' => is_array($comment['aiCategories'] ?? null) ? $comment['aiCategories'] : [],
+                    'aiReviewError' => (bool)($comment['aiReviewError'] ?? false),
                 ];
             }
         }
@@ -404,13 +446,16 @@ final class PostModel extends StateModel
     public function counts(): array
     {
         $posts = $this->all();
-        $counts = ['toApprove' => 0, 'reported' => 0, 'approved' => 0, 'removed' => 0, 'comments' => 0, 'total' => count($posts)];
+        $counts = ['toApprove' => 0, 'reported' => 0, 'aiReview' => 0, 'approved' => 0, 'removed' => 0, 'comments' => 0, 'total' => count($posts)];
         foreach ($posts as $post) {
-            if ($post['status'] === 'pending' && !$post['reported']) {
+            if ($post['status'] === 'pending' && !$post['reported'] && empty($post['aiNeedsReview'])) {
                 $counts['toApprove']++;
             }
             if ($post['reported']) {
                 $counts['reported']++;
+            }
+            if (!empty($post['aiNeedsReview'])) {
+                $counts['aiReview']++;
             }
             if (isset($counts[$post['status']])) {
                 $counts[$post['status']]++;
@@ -419,6 +464,9 @@ final class PostModel extends StateModel
                 $counts['comments']++;
                 if (!empty($comment['reported'])) {
                     $counts['reported']++;
+                }
+                if (!empty($comment['aiNeedsReview'])) {
+                    $counts['aiReview']++;
                 }
             }
         }
@@ -448,6 +496,8 @@ final class PostModel extends StateModel
                 return ['error' => 'Open and check this post before you approve or remove it.'];
             }
             $post['status'] = $status;
+            $post['aiNeedsReview'] = false;
+            $post['aiReviewError'] = false;
             $post['reported'] = false;
             $post['reportReason'] = '';
             $post['reportedAt'] = null;
@@ -615,14 +665,15 @@ final class PostModel extends StateModel
         )));
     }
 
-    public function addComment(int $postId, string $author, string $text): bool
+    public function addComment(int $postId, string $author, string $text, ?array $aiReview = null): bool
     {
         $text = trim($text);
         if ($text === '') {
             return false;
         }
+        $aiNeedsReview = !empty($aiReview['needsReview']);
         $added = false;
-        $this->update($postId, static function (&$post) use ($author, $text, &$added): void {
+        $this->update($postId, static function (&$post) use ($author, $text, $aiReview, $aiNeedsReview, &$added): void {
             if (!empty($post['locked']) || $post['status'] !== 'approved') {
                 return;
             }
@@ -636,11 +687,48 @@ final class PostModel extends StateModel
                 'hearts' => 0,
                 'reported' => false,
                 'reportReason' => '',
-                'hidden' => false,
+                'hidden' => $aiNeedsReview,
+                'aiFlagged' => (bool)($aiReview['flagged'] ?? false),
+                'aiNeedsReview' => $aiNeedsReview,
+                'aiCategories' => is_array($aiReview['categories'] ?? null) ? $aiReview['categories'] : [],
+                'aiReviewError' => $aiNeedsReview && empty($aiReview['available']),
             ];
             $added = true;
         });
         return $added;
+    }
+
+    public function approveAiComment(int $postId, int $commentId): bool
+    {
+        $approved = false;
+        $this->update($postId, static function (&$post) use ($commentId, &$approved): void {
+            foreach ($post['commentList'] as &$comment) {
+                if ((int)$comment['id'] !== $commentId || empty($comment['aiNeedsReview'])) {
+                    continue;
+                }
+                $comment['aiNeedsReview'] = false;
+                $comment['aiReviewError'] = false;
+                $comment['hidden'] = false;
+                $approved = true;
+                break;
+            }
+            unset($comment);
+        });
+        return $approved;
+    }
+
+    public function commentNeedsAiReview(int $postId, int $commentId): bool
+    {
+        $post = $this->get($postId);
+        if ($post === null) {
+            return false;
+        }
+        foreach ($post['commentList'] as $comment) {
+            if ((int)$comment['id'] === $commentId) {
+                return !empty($comment['aiNeedsReview']);
+            }
+        }
+        return false;
     }
 
     public function reportComment(int $postId, int $commentId, string $reason): array
@@ -704,6 +792,7 @@ final class PostModel extends StateModel
                     $comment['reported'] = false;
                     $comment['reportReason'] = '';
                     $comment['reportedAt'] = null;
+                    $comment['aiNeedsReview'] = false;
                 }
                 $updated = true;
                 break;
@@ -753,6 +842,10 @@ final class PostModel extends StateModel
                 $comment['reportReason'] = (string)($comment['reportReason'] ?? '');
                 $comment['reportedAt'] = isset($comment['reportedAt']) ? (int)$comment['reportedAt'] : null;
                 $comment['hidden'] = (bool)($comment['hidden'] ?? false);
+                $comment['aiFlagged'] = (bool)($comment['aiFlagged'] ?? false);
+                $comment['aiNeedsReview'] = (bool)($comment['aiNeedsReview'] ?? false);
+                $comment['aiCategories'] = is_array($comment['aiCategories'] ?? null) ? $comment['aiCategories'] : [];
+                $comment['aiReviewError'] = (bool)($comment['aiReviewError'] ?? false);
                 $comments[] = $comment;
             }
         }
@@ -760,7 +853,7 @@ final class PostModel extends StateModel
         return $comments;
     }
 
-    public function add(array $data, string $author, array $communitySlugs): array
+    public function add(array $data, string $author, array $communitySlugs, ?array $aiReview = null): array
     {
         $community = trim((string)($data['community'] ?? ''));
         $title = trim((string)($data['title'] ?? ''));
@@ -789,6 +882,7 @@ final class PostModel extends StateModel
         if (count($tags) > 5) {
             return ['error' => 'A post can have up to five tags.'];
         }
+        $aiNeedsReview = !empty($aiReview['needsReview']);
         $posts = $this->all();
         $ids = array_column($posts, 'id');
         $id = $ids ? max($ids) + 1 : 1;
@@ -806,10 +900,14 @@ final class PostModel extends StateModel
             'pinned' => false,
             'locked' => false,
             'tags' => $tags,
-            'status' => 'approved',
+            'status' => $aiNeedsReview ? 'pending' : 'approved',
             'reported' => false,
             'reportReason' => '',
-            'reviewed' => true,
+            'reviewed' => !$aiNeedsReview,
+            'aiFlagged' => (bool)($aiReview['flagged'] ?? false),
+            'aiNeedsReview' => $aiNeedsReview,
+            'aiCategories' => is_array($aiReview['categories'] ?? null) ? $aiReview['categories'] : [],
+            'aiReviewError' => $aiNeedsReview && empty($aiReview['available']),
             'commentList' => [],
         ];
         $this->save(self::POSTS, $posts);

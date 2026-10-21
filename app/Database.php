@@ -40,6 +40,12 @@ final class Database
                     CONSTRAINT user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB'
             );
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS ai_moderation_settings (
+                    id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+                    enabled TINYINT(1) NOT NULL DEFAULT 0
+                ) ENGINE=InnoDB'
+            );
             self::$connection = $mysql;
             return $mysql;
         } catch (PDOException $mysqlException) {
@@ -82,6 +88,12 @@ final class Database
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
                 FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
+            )'
+        );
+        self::$connection->exec(
+            'CREATE TABLE IF NOT EXISTS ai_moderation_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER NOT NULL DEFAULT 0
             )'
         );
         self::$usingLocalStorage = true;

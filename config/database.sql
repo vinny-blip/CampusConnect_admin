@@ -32,3 +32,9 @@ CREATE TABLE IF NOT EXISTS user_restrictions (
   CONSTRAINT user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
   CONSTRAINT user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ai_moderation_settings (
+  id TINYINT UNSIGNED NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB;

@@ -138,7 +138,7 @@ final class PageController
         $this->inbox = new InboxModel($this->db, $userId);
         $this->notifications = new NotificationModel($this->db, $userId);
         $this->restricted = new RestrictedModel($this->db);
-        $this->aiModeration = new AiModerationModel($this->db, $userId);
+        $this->aiModeration = new AiModerationModel($this->db);
     }
 
     private function handlePost(): void
@@ -209,7 +209,7 @@ final class PageController
             ],
             'queues' => [
                 'approve', 'remove', 'toggle-ai-moderation', 'clear-post-report',
-                'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post',
+                'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post', 'approve-ai-comment',
             ],
             'create' => ['create-post'],
             'communities' => ['star', 'leave', 'Alumni', 'Advisor', 'create-community'],
@@ -223,6 +223,17 @@ final class PageController
         if (!in_array($action, $allowedActions, true)) {
             http_response_code(400);
             exit('Unsupported form action.');
+        }
+
+        $postId = (int)($_POST['post_id'] ?? ($this->page === 'post' ? ($_GET['id'] ?? 0) : 0));
+        if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {
+            $post = $this->posts->get($postId);
+            $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
+        }
+        if (in_array($action, ['approve-ai-comment', 'delete-comment', 'hide-comment', 'restore-comment'], true)) {
+            $this->requireAdminForAiReview(
+                $this->posts->commentNeedsAiReview($postId, (int)($_POST['comment_id'] ?? 0))
+            );
         }
 
         if (in_array($action, ['create-post', 'comment'], true)
@@ -295,10 +306,35 @@ final class PageController
         }
     }
 
+    private function requireAdminForAiReview(bool $needsReview): void
+    {
+        if ($needsReview && ($this->user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            exit('Only the admin can decide AI-flagged content.');
+        }
+    }
+
     private function handleQueueAction(string $action): void
     {
+        if ($action === 'toggle-ai-moderation') {
+            $this->requireAdminForAiReview(true);
+        }
+        $postId = (int)($_POST['post_id'] ?? 0);
+        $commentId = (int)($_POST['comment_id'] ?? 0);
+        if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {
+            $post = $this->posts->get($postId);
+            $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
+        }
+        if (in_array($action, ['approve-ai-comment', 'delete-comment', 'hide-comment'], true)) {
+            $this->requireAdminForAiReview($this->posts->commentNeedsAiReview($postId, $commentId));
+        }
+        if ($action === 'approve-ai-comment') {
+            $approved = $this->posts->approveAiComment($postId, $commentId);
+            $this->flash($approved ? 'AI-flagged comment approved.' : 'Comment is no longer awaiting AI review.', $approved ? 'success' : 'error');
+            return;
+        }
         if ($action === 'delete-post') {
-            $deleted = $this->posts->deletePost((int)($_POST['post_id'] ?? 0), $this->user['name']);
+            $deleted = $this->posts->deletePost($postId, $this->user['name']);
             $this->flash($deleted ? 'Post permanently deleted.' : 'Post is no longer reported or does not exist.', $deleted ? 'success' : 'error');
             return;
         }
@@ -308,8 +344,6 @@ final class PageController
             return;
         }
         if (in_array($action, ['clear-comment-report', 'delete-comment', 'hide-comment'], true)) {
-            $postId = (int)($_POST['post_id'] ?? 0);
-            $commentId = (int)($_POST['comment_id'] ?? 0);
             if ($action === 'delete-comment') {
                 $this->posts->removeComment($postId, $commentId);
                 $this->flash('Comment removed.');
@@ -326,6 +360,10 @@ final class PageController
         if ($status === '') {
             if ($action === 'toggle-ai-moderation') {
                 $enabled = ($_POST['enabled'] ?? '') === '1';
+                if ($enabled && !$this->aiModeration->configured()) {
+                    $this->flash('Configure OPENAI_API_KEY on the server before enabling AI moderation.', 'error');
+                    return;
+                }
                 $this->aiModeration->setEnabled($enabled);
                 $this->flash($enabled ? 'AI moderation preference turned on.' : 'AI moderation preference turned off.');
             }
@@ -339,6 +377,13 @@ final class PageController
     {
         $id = (int)($_GET['id'] ?? $_POST['post_id'] ?? 0);
         $commentId = (int)($_POST['comment_id'] ?? 0);
+        if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {
+            $post = $this->posts->get($id);
+            $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
+        }
+        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
+            $this->requireAdminForAiReview($this->posts->commentNeedsAiReview($id, $commentId));
+        }
         if ($action === 'approve' || $action === 'remove') {
             $result = $this->posts->setStatus($id, $action === 'approve' ? 'approved' : 'removed', $this->user['name']);
             $this->flash($result['error'] ?? ($action === 'approve' ? 'Post approved.' : 'Post removed.'), isset($result['error']) ? 'error' : 'success');
@@ -370,7 +415,9 @@ final class PageController
             $this->flash('Comment removed.');
         } elseif ($action === 'hide-comment' || $action === 'restore-comment') {
             $hidden = $action === 'hide-comment';
-            $updated = $this->posts->hideComment($id, $commentId, $hidden);
+            $updated = !$hidden && $this->posts->commentNeedsAiReview($id, $commentId)
+                ? $this->posts->approveAiComment($id, $commentId)
+                : $this->posts->hideComment($id, $commentId, $hidden);
             $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
         } elseif ($action === 'edit-post') {
             $result = $this->posts->updatePost(
@@ -386,12 +433,18 @@ final class PageController
         } elseif ($action === 'like-comment' || $action === 'heart-comment') {
             $this->posts->reactComment($id, $commentId, $action === 'like-comment' ? 'likes' : 'hearts');
         } elseif ($action === 'comment') {
-            if (!$this->posts->addComment($id, $this->user['name'], (string)($_POST['text'] ?? ''))) {
+            $commentText = (string)($_POST['text'] ?? '');
+            $aiReview = $this->moderateSubmission($commentText);
+            if (!$this->posts->addComment($id, $this->user['name'], $commentText, $aiReview)) {
                 $post = $this->posts->get($id);
                 $message = $post === null
                     ? 'Post not found.'
                     : (!empty($post['locked']) ? 'Comments are locked for this post.' : ($post['status'] !== 'approved' ? 'Comments are unavailable for this post.' : 'Write a comment first.'));
                 $this->flash($message, 'error');
+            } elseif (!empty($aiReview['needsReview'])) {
+                $this->flash(!empty($aiReview['available'])
+                    ? 'Comment held for admin review after an AI flag.'
+                    : 'AI check unavailable. Comment held for admin review.');
             } elseif (isset($_GET['reply'])) {
                 $this->redirect('post.php?id=' . $id . (isset($_GET['review']) ? '&review=1' : ''));
             }
@@ -402,12 +455,17 @@ final class PageController
     {
         $postId = (int)($_POST['post_id'] ?? 0);
         $commentId = (int)($_POST['comment_id'] ?? 0);
+        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
+            $this->requireAdminForAiReview($this->posts->commentNeedsAiReview($postId, $commentId));
+        }
         if ($action === 'delete-comment') {
             $this->posts->removeComment($postId, $commentId);
             $this->flash('Comment removed.');
         } elseif ($action === 'hide-comment' || $action === 'restore-comment') {
             $hidden = $action === 'hide-comment';
-            $updated = $this->posts->hideComment($postId, $commentId, $hidden);
+            $updated = !$hidden && $this->posts->commentNeedsAiReview($postId, $commentId)
+                ? $this->posts->approveAiComment($postId, $commentId)
+                : $this->posts->hideComment($postId, $commentId, $hidden);
             $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
         } elseif ($action === 'report-comment') {
             $result = $this->posts->reportComment($postId, $commentId, (string)($_POST['reason'] ?? ''));
@@ -443,13 +501,33 @@ final class PageController
         $postData = $_POST;
         $postData['image'] = $image;
         $communitySlugs = array_column($this->communities->list(), 'slug');
-        $result = $this->posts->add($postData, $this->user['name'], $communitySlugs);
+        $aiReview = $this->moderateSubmission(
+            trim((string)($postData['title'] ?? '') . "\n" . (string)($postData['body'] ?? '')),
+            $image
+        );
+        $result = $this->posts->add($postData, $this->user['name'], $communitySlugs, $aiReview);
         if (isset($result['error'])) {
             $this->flash($result['error'], 'error');
+        } elseif (!empty($aiReview['needsReview'])) {
+            $this->flash(!empty($aiReview['available'])
+                ? 'Post held for admin review after an AI flag.'
+                : 'AI check unavailable. Post held for admin review.');
+            $this->redirect('queues.php');
         } else {
             $this->flash('Post published.');
             $this->redirect('post.php?id=' . $result['id']);
         }
+    }
+
+    private function moderateSubmission(string $text, string $image = ''): array
+    {
+        if (!$this->aiModeration->enabled()) {
+            return ['available' => true, 'flagged' => false, 'categories' => [], 'needsReview' => false];
+        }
+
+        $result = $this->aiModeration->inspect($text, $image);
+        $result['needsReview'] = empty($result['available']) || !empty($result['flagged']);
+        return $result;
     }
 
     private function handleCommunityAction(string $action): void
@@ -540,7 +618,8 @@ final class PageController
         if (in_array($this->page, ['home', 'newest', 'posts', 'control', 'saved', 'reported', 'search', 'community'], true)) {
             $data += $this->feedData();
         } elseif ($this->page === 'queues') {
-            $kind = ($_GET['tab'] ?? '') === 'reported' ? 'reported' : 'approve';
+            $tab = (string)($_GET['tab'] ?? '');
+            $kind = in_array($tab, ['reported', 'ai'], true) ? $tab : 'approve';
             $query = trim((string)($_GET['q'] ?? ''));
             $data += [
                 'kind' => $kind,
@@ -548,7 +627,9 @@ final class PageController
                 'counts' => $this->posts->counts(),
                 'posts' => $this->named($this->posts->queue($kind, $query)),
                 'reportedComments' => $kind === 'reported' ? $this->posts->reportedComments($query) : [],
+                'aiReviewComments' => $kind === 'ai' ? $this->posts->aiReviewComments($query) : [],
                 'aiModerationEnabled' => $this->aiModeration->enabled(),
+                'aiModerationConfigured' => $this->aiModeration->configured(),
             ];
         } elseif ($this->page === 'post') {
             $id = (int)($_GET['id'] ?? 0);
