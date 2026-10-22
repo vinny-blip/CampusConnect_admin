@@ -159,9 +159,6 @@ final class PageController
                 $this->flash('Demo login verified. Set up a database to use the dashboard.');
                 $this->redirect('login.php');
             }
-            $this->flash($this->usingLocalStorage
-                ? 'Login successful. Using local storage; MySQL is optional.'
-                : 'Login successful.');
             $this->redirect('home.php');
         }
         if ($this->page === 'register' && $action === 'register') {
