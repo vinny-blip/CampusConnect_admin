@@ -15,8 +15,8 @@ final class RestrictedModel
     {
         $statement = $this->db->query(
             'SELECT restrictions.user_id, users.name, users.email, restrictions.reason, restrictions.created_at AS t
-             FROM user_restrictions AS restrictions
-             INNER JOIN users ON users.id = restrictions.user_id
+             FROM admin_user_restrictions AS restrictions
+             INNER JOIN admin_users AS users ON users.id = restrictions.user_id
              ORDER BY restrictions.created_at DESC'
         );
         return $statement->fetchAll();
@@ -24,7 +24,7 @@ final class RestrictedModel
 
     public function isRestricted(int $userId): bool
     {
-        $statement = $this->db->prepare('SELECT 1 FROM user_restrictions WHERE user_id = ?');
+        $statement = $this->db->prepare('SELECT 1 FROM admin_user_restrictions WHERE user_id = ?');
         $statement->execute([$userId]);
         return $statement->fetchColumn() !== false;
     }
@@ -43,7 +43,7 @@ final class RestrictedModel
             return 'The admin account cannot be restricted here.';
         }
 
-        $target = $this->db->prepare('SELECT id FROM users WHERE LOWER(email) = ?');
+        $target = $this->db->prepare('SELECT id FROM admin_users WHERE LOWER(email) = ?');
         $target->execute([$email]);
         $userId = $target->fetchColumn();
         if ($userId === false) {
@@ -54,7 +54,7 @@ final class RestrictedModel
         }
 
         $statement = $this->db->prepare(
-            'INSERT INTO user_restrictions (user_id, restricted_by, reason, created_at) VALUES (?, ?, ?, ?)'
+            'INSERT INTO admin_user_restrictions (user_id, restricted_by, reason, created_at) VALUES (?, ?, ?, ?)'
         );
         $statement->execute([(int)$userId, $adminId, $reason, (int)(microtime(true) * 1000)]);
         return null;
@@ -62,7 +62,7 @@ final class RestrictedModel
 
     public function remove(int $userId): void
     {
-        $statement = $this->db->prepare('DELETE FROM user_restrictions WHERE user_id = ?');
+        $statement = $this->db->prepare('DELETE FROM admin_user_restrictions WHERE user_id = ?');
         $statement->execute([$userId]);
     }
 }

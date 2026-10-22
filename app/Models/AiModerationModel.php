@@ -9,7 +9,7 @@ final class AiModerationModel
 
     public function enabled(): bool
     {
-        $enabled = $this->db->query('SELECT enabled FROM ai_moderation_settings WHERE id = 1')->fetchColumn();
+        $enabled = $this->db->query('SELECT enabled FROM admin_ai_moderation_settings WHERE id = 1')->fetchColumn();
         return $enabled !== false && (bool)$enabled;
     }
 
@@ -24,7 +24,7 @@ final class AiModerationModel
             ? 'ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled'
             : 'ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)';
         $statement = $this->db->prepare(
-            'INSERT INTO ai_moderation_settings (id, enabled) VALUES (1, ?) ' . $upsert
+            'INSERT INTO admin_ai_moderation_settings (id, enabled) VALUES (1, ?) ' . $upsert
         );
         $statement->execute([$enabled ? 1 : 0]);
     }

@@ -1,18 +1,6 @@
 <?php
 declare(strict_types=1);
 
-session_start();
-
-require_once dirname(__DIR__) . '/Database.php';
-require_once dirname(__DIR__) . '/helpers.php';
-
-spl_autoload_register(static function (string $class): void {
-    $modelPath = dirname(__DIR__) . '/Models/' . $class . '.php';
-    if (is_file($modelPath)) {
-        require_once $modelPath;
-    }
-});
-
 final class PageController
 {
     private ?PDO $db = null;
@@ -117,18 +105,17 @@ final class PageController
         }
 
         $data = $this->pageData();
-        extract($data, EXTR_SKIP);
-        $page = $this->page;
         $flash = $_SESSION['flash'] ?? null;
         unset($_SESSION['flash']);
         $csrf = $this->csrfField();
-        $databaseUnavailable = $this->databaseUnavailable;
-        $usingLocalStorage = $this->usingLocalStorage;
-        if (in_array($this->page, ['login', 'register'], true)) {
-            require dirname(__DIR__) . '/Views/auth.php';
-            return;
-        }
-        require dirname(__DIR__) . '/Views/layout.php';
+        (new ViewRenderer())->render(
+            $this->page,
+            $data,
+            $flash,
+            $csrf,
+            $this->databaseUnavailable,
+            $this->usingLocalStorage
+        );
     }
 
     private function initializeModels(int $userId): void
@@ -578,7 +565,7 @@ final class PageController
                 $this->flash('Profile updated.');
             }
         } elseif ($action === 'reset') {
-            $statement = $this->db->prepare('DELETE FROM app_state WHERE user_id = ?');
+            $statement = $this->db->prepare('DELETE FROM admin_app_state WHERE user_id = ?');
             $statement->execute([(int)$this->user['id']]);
             $this->flash('Demo data reset. Your account was kept.');
         }

@@ -27,21 +27,21 @@ final class Database
                 $config['db_name']
             );
             $mysql = new PDO($dsn, $config['db_user'], $config['db_password'], $options);
-            $mysql->query('SELECT id, name, email, password_hash FROM users LIMIT 0');
-            $mysql->query('SELECT user_id, state_key, state_data FROM app_state LIMIT 0');
+            $mysql->query('SELECT id, name, email, password_hash FROM admin_users LIMIT 0');
+            $mysql->query('SELECT user_id, state_key, state_data FROM admin_app_state LIMIT 0');
             $mysql->exec(
-                'CREATE TABLE IF NOT EXISTS user_restrictions (
+                'CREATE TABLE IF NOT EXISTS admin_user_restrictions (
                     user_id BIGINT UNSIGNED NOT NULL,
                     restricted_by BIGINT UNSIGNED NOT NULL,
                     reason VARCHAR(500) NOT NULL,
                     created_at BIGINT NOT NULL,
                     PRIMARY KEY (user_id),
-                    CONSTRAINT user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                    CONSTRAINT user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
+                    CONSTRAINT admin_user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE,
+                    CONSTRAINT admin_user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB'
             );
             $mysql->exec(
-                'CREATE TABLE IF NOT EXISTS ai_moderation_settings (
+                'CREATE TABLE IF NOT EXISTS admin_ai_moderation_settings (
                     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
                     enabled TINYINT(1) NOT NULL DEFAULT 0
                 ) ENGINE=InnoDB'
@@ -62,7 +62,7 @@ final class Database
         self::$connection = new PDO('sqlite:' . $storageDirectory . '/campusconnect.sqlite', null, null, $options);
         self::$connection->exec('PRAGMA foreign_keys = ON');
         self::$connection->exec(
-            'CREATE TABLE IF NOT EXISTS users (
+            'CREATE TABLE IF NOT EXISTS admin_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
@@ -71,27 +71,27 @@ final class Database
             )'
         );
         self::$connection->exec(
-            'CREATE TABLE IF NOT EXISTS app_state (
+            'CREATE TABLE IF NOT EXISTS admin_app_state (
                 user_id INTEGER NOT NULL,
                 state_key TEXT NOT NULL,
                 state_data TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, state_key),
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE
             )'
         );
         self::$connection->exec(
-            'CREATE TABLE IF NOT EXISTS user_restrictions (
+            'CREATE TABLE IF NOT EXISTS admin_user_restrictions (
                 user_id INTEGER PRIMARY KEY,
                 restricted_by INTEGER NOT NULL,
                 reason TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (restricted_by) REFERENCES users (id) ON DELETE CASCADE
+                FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE,
+                FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE
             )'
         );
         self::$connection->exec(
-            'CREATE TABLE IF NOT EXISTS ai_moderation_settings (
+            'CREATE TABLE IF NOT EXISTS admin_ai_moderation_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 enabled INTEGER NOT NULL DEFAULT 0
             )'

@@ -2,6 +2,8 @@ Options -Indexes
 RewriteEngine On
 
 RewriteRule ^(?:app|config|storage)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:\.git|\.env|composer\.(?:json|lock)|config/database\.local\.php)(?:/|$) - [F,L,NC]
 RewriteRule ^public/ - [F,L,NC]
 RewriteRule ^$ public/index.php [END]
-RewriteRule ^(.+)$ public/$1 [END]
+RewriteRule ^assets/(.*)$ public/assets/$1 [END]
+RewriteRule ^(.+)$ public/index.php?_cc_route=$1 [END,QSA]

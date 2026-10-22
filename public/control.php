@@ -1,3 +1,2 @@
 <?php
-require dirname(__DIR__) . '/app/Controllers/PageController.php';
-(new PageController('control'))->run();
+require __DIR__ . '/index.php';

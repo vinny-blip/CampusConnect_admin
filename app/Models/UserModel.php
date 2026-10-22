@@ -10,10 +10,10 @@ final class UserModel
         $config = require dirname(__DIR__, 2) . '/config/database.php';
         $this->adminEmail = mb_strtolower(trim((string)$config['admin_email']));
 
-        $statement = $this->db->prepare('SELECT id FROM users WHERE email = ?');
+        $statement = $this->db->prepare('SELECT id FROM admin_users WHERE email = ?');
         $statement->execute(['mod@campus.edu.ph']);
         if ($statement->fetchColumn() === false) {
-            $insert = $this->db->prepare('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)');
+            $insert = $this->db->prepare('INSERT INTO admin_users (name, email, password_hash) VALUES (?, ?, ?)');
             $insert->execute([
                 'Demo Moderator',
                 'mod@campus.edu.ph',
@@ -24,7 +24,7 @@ final class UserModel
 
     public function findById(int $id): ?array
     {
-        $statement = $this->db->prepare('SELECT id, name, email FROM users WHERE id = ?');
+        $statement = $this->db->prepare('SELECT id, name, email FROM admin_users WHERE id = ?');
         $statement->execute([$id]);
         $user = $statement->fetch();
         return $user ? $this->withRole($user) : null;
@@ -32,7 +32,7 @@ final class UserModel
 
     public function findByEmail(string $email): ?array
     {
-        $statement = $this->db->prepare('SELECT id, name, email FROM users WHERE email = ?');
+        $statement = $this->db->prepare('SELECT id, name, email FROM admin_users WHERE email = ?');
         $statement->execute([mb_strtolower(trim($email))]);
         $user = $statement->fetch();
         return $user ? $this->withRole($user) : null;
@@ -40,7 +40,7 @@ final class UserModel
 
     public function login(string $email, string $password): ?array
     {
-        $statement = $this->db->prepare('SELECT id, name, email, password_hash FROM users WHERE email = ?');
+        $statement = $this->db->prepare('SELECT id, name, email, password_hash FROM admin_users WHERE email = ?');
         $statement->execute([mb_strtolower(trim($email))]);
         $user = $statement->fetch();
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -70,7 +70,7 @@ final class UserModel
             return ['error' => 'Passwords do not match.'];
         }
         try {
-            $statement = $this->db->prepare('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)');
+            $statement = $this->db->prepare('INSERT INTO admin_users (name, email, password_hash) VALUES (?, ?, ?)');
             $statement->execute(["{$first} {$last}", $email, password_hash($password, PASSWORD_DEFAULT)]);
         } catch (PDOException $exception) {
             if ($exception->getCode() === '23000') {
@@ -87,7 +87,7 @@ final class UserModel
         if ($name === '') {
             return false;
         }
-        $statement = $this->db->prepare('UPDATE users SET name = ? WHERE id = ?');
+        $statement = $this->db->prepare('UPDATE admin_users SET name = ? WHERE id = ?');
         $statement->execute([$name, $id]);
         return true;
     }

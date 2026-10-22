@@ -11,7 +11,7 @@ class StateModel
 
     protected function load(string $key, callable $seed): array
     {
-        $statement = $this->db->prepare('SELECT state_data FROM app_state WHERE user_id = ? AND state_key = ?');
+        $statement = $this->db->prepare('SELECT state_data FROM admin_app_state WHERE user_id = ? AND state_key = ?');
         $statement->execute([$this->userId, $key]);
         $data = $statement->fetchColumn();
         if ($data !== false) {
@@ -33,7 +33,7 @@ class StateModel
             ? 'ON CONFLICT(user_id, state_key) DO UPDATE SET state_data = excluded.state_data'
             : 'ON DUPLICATE KEY UPDATE state_data = VALUES(state_data)';
         $statement = $this->db->prepare(
-            'INSERT INTO app_state (user_id, state_key, state_data) VALUES (?, ?, ?) ' . $upsert
+            'INSERT INTO admin_app_state (user_id, state_key, state_data) VALUES (?, ?, ?) ' . $upsert
         );
         $statement->execute([
             $this->userId,
