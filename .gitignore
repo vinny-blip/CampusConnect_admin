@@ -1,2 +1,1 @@
-/config/database.local.php
-/app/data/*.sqlite
+config/openai.local.php

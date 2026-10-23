@@ -3,12 +3,8 @@ declare(strict_types=1);
 
 final class RestrictedModel
 {
-    private string $adminEmail;
-
     public function __construct(private PDO $db)
     {
-        $config = require dirname(__DIR__, 2) . '/config/database.php';
-        $this->adminEmail = mb_strtolower(trim((string)$config['admin_email']));
     }
 
     public function list(): array
@@ -39,16 +35,16 @@ final class RestrictedModel
         if ($reason === '') {
             return 'Add a reason so other moderators know why.';
         }
-        if ($email === $this->adminEmail) {
-            return 'The admin account cannot be restricted here.';
-        }
-
-        $target = $this->db->prepare('SELECT id FROM admin_users WHERE LOWER(email) = ?');
+        $target = $this->db->prepare("SELECT id, role FROM admin_users WHERE LOWER(email) = ?");
         $target->execute([$email]);
-        $userId = $target->fetchColumn();
-        if ($userId === false) {
+        $user = $target->fetch();
+        if (!$user) {
             return 'No moderator account was found with that email.';
         }
+        if (($user['role'] ?? '') === 'admin') {
+            return 'An administrator account cannot be restricted here.';
+        }
+        $userId = $user['id'];
         if ($this->isRestricted((int)$userId)) {
             return 'That moderator is already restricted.';
         }

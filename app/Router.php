@@ -4,11 +4,11 @@ declare(strict_types=1);
 final class Router
 {
     private const ROUTES = [
-        'index', 'login', 'register', 'home', 'newest', 'control', 'queues',
-        'modmail', 'messages', 'designatmobbin', 'community', 'communities',
-        'create-community', 'about', 'faqs', 'post', 'overview', 'posts',
-        'comments', 'saved', 'restricted', 'reported', 'create',
+        'index', 'login', 'register', 'home', 'control', 'queues',
+        'about', 'faqs', 'post', 'overview', 'posts',
+        'comments', 'restricted', 'reported',
         'notifications', 'profile', 'search',
+        'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments', 'mobile-users',
     ];
 
     public static function dispatch(?string $requestedRoute = null): void

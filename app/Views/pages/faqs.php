@@ -19,8 +19,6 @@
       <p>This web dashboard is for moderators to review reported content, manage moderation queues, and help keep community discussions organized and respectful.</p>
     </details>
     <details class="faq-item">
-      <summary>How do I find the communities I moderate?</summary>
-      <p>Open <a href="communities.php">Communities</a> to view the communities connected to your moderator account.</p>
     </details>
     <details class="faq-item">
       <summary>What happens when a post is reported?</summary>
@@ -28,7 +26,6 @@
     </details>
     <details class="faq-item">
       <summary>How can I contact the moderation team?</summary>
-      <p>Use <a href="modmail.php">Mod Mail</a> to view or start a conversation with the moderation team.</p>
     </details>
     <details class="faq-item">
       <summary>Does the project support anonymous questions and resource sharing?</summary>

@@ -42,7 +42,6 @@ function icon_svg(string $name): string
 {
     $paths = [
         'home' => '<path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/>',
-        'clock' => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
         'queue' => '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
         'sliders' => '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M2 14h4M10 8h4M18 16h4"/>',
         'mail' => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
@@ -77,13 +76,6 @@ function report_reason_options(): array
         'Plagiarized content',
         'Other guideline violation',
     ];
-}
-
-function community_url(string $slug): string
-{
-    return $slug === 'designatmobbin'
-        ? 'designatmobbin.php'
-        : 'community.php?c=' . rawurlencode($slug);
 }
 
 function flash_message(?array $flash): void

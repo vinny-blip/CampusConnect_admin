@@ -14,11 +14,6 @@
     <img class="logo" src="assets/images/campusLogo.png" alt="">
     <img class="logo" src="assets/images/ccName.png" alt="CampusConnect">
     <p class="tagline">Connect, Share, and Learn Together</p>
-    <?php if ($databaseUnavailable): ?>
-      <p class="notice error" role="status">A database is unavailable and local storage could not be started. Check that PHP's PDO SQLite extension is enabled.</p>
-    <?php elseif ($usingLocalStorage): ?>
-      <p class="notice" role="status">MySQL is unavailable or not set up. CampusConnect is using local SQLite storage; the dashboard remains available.</p>
-    <?php endif; ?>
     <form method="post" action="login.php">
       <?= $csrf ?>
       <input type="hidden" name="action" value="login">

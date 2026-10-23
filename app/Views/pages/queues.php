@@ -2,6 +2,15 @@
   <div class="queue-title">
     <div class="queue-title-row">
       <h2>Queues</h2>
+      <form class="ai-moderation-form queue-header-toggle" method="post">
+        <?= $csrf ?>
+        <input type="hidden" name="action" value="toggle-ai-moderation">
+        <input type="hidden" name="enabled" value="<?= $aiModerationEnabled ? '0' : '1' ?>">
+        <button class="ai-moderation-toggle<?= $aiModerationEnabled ? ' enabled' : '' ?>" type="submit" aria-pressed="<?= $aiModerationEnabled ? 'true' : 'false' ?>">
+          <span><?= $aiModerationEnabled ? 'AI Moderation is on' : 'Turn on AI Moderation' ?></span>
+          <span class="ai-switch" aria-hidden="true"><span></span></span>
+        </button>
+      </form>
     </div>
     <p class="sub">Review posts and comments against the community guidelines. Reported content appears in the reported tab.</p>
   </div>
@@ -20,15 +29,6 @@
     <button class="button" type="submit">Search</button>
   </form>
   <div class="queue-status">
-    <form class="ai-moderation-form" method="post">
-      <?= $csrf ?>
-      <input type="hidden" name="action" value="toggle-ai-moderation">
-      <input type="hidden" name="enabled" value="<?= $aiModerationEnabled ? '0' : '1' ?>">
-      <button class="ai-moderation-toggle<?= $aiModerationEnabled ? ' enabled' : '' ?>" type="submit" aria-pressed="<?= $aiModerationEnabled ? 'true' : 'false' ?>">
-        <span><?= $aiModerationEnabled ? 'AI Moderation is on' : 'Turn on AI Moderation' ?></span>
-        <span class="ai-switch" aria-hidden="true"><span></span></span>
-      </button>
-    </form>
     <span class="count"><?= count($posts) + count($reportedComments) + count($aiReviewComments) ?> items shown</span>
   </div>
 </nav>
@@ -41,7 +41,7 @@
         <div class="meta">
           <span class="avatar sm"><?= h(mb_strtoupper(mb_substr($post['author'], 0, 1))) ?></span>
           <b><?= h($post['author']) ?></b>
-          <span>• <a href="<?= h(community_url($post['community'])) ?>"><?= h($post['cname']) ?></a></span>
+          <span>• <?= h($post['cname']) ?></span>
           <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
           <?php if ($post['status'] === 'approved' && $post['approvedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?></time><?php endif; ?>
           <?php if ($post['status'] === 'removed'): ?>

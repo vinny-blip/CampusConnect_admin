@@ -4,7 +4,7 @@
   <p class="sub"><a href="<?= h($back) ?>"><?= icon_svg('back') ?> Back</a></p>
   <div class="review">
     <span class="tag <?= h($post['status']) ?>"><?= h($post['status']) ?></span>
-    <a href="<?= h(community_url($post['community'])) ?>"><b><?= h($post['cname']) ?></b></a>
+    <b><?= h($post['cname']) ?></b>
     <span>• <?= h($post['author']) ?></span><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
     <?php if ($post['status'] === 'approved' && $post['approvedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?></time><?php endif; ?>
     <?php if ($post['status'] === 'removed'): ?>

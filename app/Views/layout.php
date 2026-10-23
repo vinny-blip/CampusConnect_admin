@@ -17,8 +17,6 @@
         <input id="search" class="search" name="q" type="search" placeholder="Search CampusConnect" aria-label="Search CampusConnect" value="<?= h($_GET['q'] ?? '') ?>">
       </form>
       <div class="top-actions">
-        <a class="icon-btn" href="messages.php" aria-label="Messages" title="Messages"><?= icon_svg('message') ?><span class="badge"><?= $messageCount ?: '' ?></span></a>
-        <a class="create" href="create.php"><?= icon_svg('plus') ?> Create Post</a>
         <a class="icon-btn" href="notifications.php" aria-label="Notifications" title="Notifications"><?= icon_svg('bell') ?><span class="badge"><?= $noteCount ?: '' ?></span></a>
         <a class="avatar" href="profile.php" aria-label="Profile" title="<?= h($user['name']) ?>"><?= h(initials($user['name'])) ?></a>
       </div>
@@ -26,13 +24,8 @@
     <div class="body">
       <nav class="sidebar" aria-label="Main">
         <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Home</a>
-        <a class="<?= $page === 'newest' ? 'on' : '' ?>" href="newest.php"><span class="ico"><?= icon_svg('clock') ?></span>Newest</a>
         <a class="<?= $page === 'control' ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Posts/Feed</a>
-        <h4>Moderating</h4>
-        <a class="<?= in_array($page, ['communities', 'create-community'], true) ? 'on' : '' ?>" href="communities.php"><span class="ico"><?= icon_svg('users') ?></span>Manage Communities</a>
         <a class="<?= $page === 'queues' ? 'on' : '' ?>" href="queues.php"><span class="ico"><?= icon_svg('queue') ?></span>Queues</a>
-        <a class="<?= $page === 'modmail' ? 'on' : '' ?>" href="modmail.php"><span class="ico"><?= icon_svg('mail') ?></span>Mail</a>
-        <a class="community-nav <?= $page === 'designatmobbin' || ($page === 'community' && ($_GET['c'] ?? '') === 'designatmobbin') ? 'on' : '' ?>" href="designatmobbin.php"><span class="ico"><?= icon_svg('users') ?></span><span>r/designatmobbin</span></a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>
           <input type="hidden" name="action" value="logout">
@@ -43,16 +36,16 @@
         <?php
           $tabPages = [
               'overview' => 'Overview', 'posts' => 'Posts', 'comments' => 'Comments',
-              'saved' => 'Saved', 'restricted' => 'Restricted', 'reported' => 'Reported',
+              'restricted' => 'Restricted', 'reported' => 'Reported',
           ];
           $shortPages = ['post' => 'Posts'];
-          $tabSet = in_array($page, ['overview', 'posts', 'comments', 'saved', 'restricted', 'reported', 'control', 'post'], true);
+          $tabSet = in_array($page, ['overview', 'posts', 'comments', 'restricted', 'reported', 'control', 'post'], true);
           if ($tabSet):
         ?>
           <nav class="tabs" aria-label="Moderation">
             <?php foreach ($tabPages as $tabPage => $tabLabel): ?>
               <?php if ($tabPage === 'restricted' && ($user['role'] ?? '') !== 'admin') continue; ?>
-              <?php if ($page === 'control' && !in_array($tabPage, ['overview', 'posts', 'comments', 'saved', 'reported'], true)) continue; ?>
+              <?php if ($page === 'control' && !in_array($tabPage, ['overview', 'posts', 'comments', 'reported'], true)) continue; ?>
               <?php if ($page === 'post' && !in_array($tabPage, ['overview', 'posts', 'reported'], true)) continue; ?>
               <a href="<?= h($tabPage) ?>.php" class="<?= ($page === $tabPage || ($page === 'post' && $tabPage === 'posts')) ? 'on' : '' ?>"><?= h($tabLabel) ?></a>
             <?php endforeach; ?>

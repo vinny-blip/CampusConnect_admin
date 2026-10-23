@@ -15,23 +15,21 @@ final class AiModerationModel
 
     public function configured(): bool
     {
-        return trim((string)getenv('OPENAI_API_KEY')) !== '';
+        return $this->apiKey() !== '';
     }
 
     public function setEnabled(bool $enabled): void
     {
-        $upsert = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
-            ? 'ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled'
-            : 'ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)';
         $statement = $this->db->prepare(
-            'INSERT INTO admin_ai_moderation_settings (id, enabled) VALUES (1, ?) ' . $upsert
+            'INSERT INTO admin_ai_moderation_settings (id, enabled) VALUES (1, ?)
+             ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)'
         );
         $statement->execute([$enabled ? 1 : 0]);
     }
 
     public function inspect(string $text, string $image = ''): array
     {
-        $apiKey = trim((string)getenv('OPENAI_API_KEY'));
+        $apiKey = $this->apiKey();
         if ($apiKey === '') {
             return ['available' => false, 'flagged' => false, 'categories' => [], 'scores' => []];
         }
@@ -53,7 +51,8 @@ final class AiModerationModel
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
-                'header' => "Authorization: Bearer {$apiKey}\r\nContent-Type: application/json\r\n",
+                'header' => "Authorization: Bearer {$apiKey}\r\n"
+                    . "Content-Type: application/json\r\n",
                 'content' => $payload,
                 'timeout' => 15,
                 'ignore_errors' => true,
@@ -86,5 +85,28 @@ final class AiModerationModel
             'categories' => $categories,
             'scores' => is_array($result['category_scores'] ?? null) ? $result['category_scores'] : [],
         ];
+    }
+
+    private function apiKey(): string
+    {
+        $key = getenv('OPENAI_API_KEY');
+        if (is_string($key) && trim($key) !== '') {
+            return trim($key);
+        }
+
+        $serverKey = $_SERVER['OPENAI_API_KEY'] ?? '';
+        if (is_string($serverKey) && trim($serverKey) !== '') {
+            return trim($serverKey);
+        }
+
+        $localConfig = dirname(__DIR__, 2) . '/config/openai.local.php';
+        if (is_file($localConfig)) {
+            $fileKey = require $localConfig;
+            if (is_string($fileKey) && trim($fileKey) !== '') {
+                return trim($fileKey);
+            }
+        }
+
+        return '';
     }
 }

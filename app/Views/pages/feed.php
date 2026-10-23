@@ -1,41 +1,17 @@
 <?php
 $showStatus = in_array($mode, ['posts', 'control'], true);
 ?>
-<?php if ($about !== null): ?>
-  <div class="about">
-    <span class="cicon big"></span>
-    <div>
-      <h2><?= h($about['name']) ?></h2>
-      <?php if (!empty($about['description'])): ?><p class="sub"><?= h($about['description']) ?></p><?php endif; ?>
-      <p class="sub"><?= h($about['visitors']) ?> visitors • <?= (int)$about['contrib'] ?> contributions past week<?= !empty($about['category']) ? ' • ' . h($about['category']) : '' ?></p>
-    </div>
-    <a class="button" href="communities.php">Manage</a>
-  </div>
-<?php else: ?>
-  <h2><?= h($feedTitle) ?></h2>
-<?php endif; ?>
+<h2><?= h($feedTitle) ?></h2>
 <?php if ($feedSub !== ''): ?>
   <?php if ($mode === 'control'): ?>
     <p class="sub">Pin or remove posts in the feed. Pending posts have to be checked in the <a href="queues.php">queue</a> first.</p>
   <?php elseif ($mode === 'reported'): ?>
     <p class="sub">Posts that members reported. Review pending ones in the <a href="queues.php?tab=reported">reported queue</a>.</p>
   <?php else: ?>
-    <p class="sub"><?= $mode === 'community' && $about === null ? $feedSub : h($feedSub) ?></p>
+    <p class="sub"><?= h($feedSub) ?></p>
   <?php endif; ?>
 <?php endif; ?>
 
-<?php if ($mode === 'search'): ?>
-  <h3 class="chead">Communities</h3>
-  <?php if ($searchCommunities): ?>
-    <?php foreach ($searchCommunities as $community): ?>
-      <div class="crow"><span class="cicon"></span><div class="info">
-        <a class="name" href="<?= h(community_url($community['slug'])) ?>"><?= h($community['name']) ?></a><br>
-        <small><?= h($community['visitors']) ?> visitors • <?= (int)$community['contrib'] ?> contributions past week</small>
-      </div></div>
-    <?php endforeach; ?>
-  <?php else: ?><p class="empty">No matching communities.</p><?php endif; ?>
-  <h3 class="chead">Posts</h3>
-<?php endif; ?>
 
 <?php if ($showStatus): ?>
   <nav class="filters" aria-label="Post status">
@@ -58,20 +34,16 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
       <div>
         <div class="meta">
           <span class="avatar sm"><?= h(mb_strtoupper(mb_substr($post['author'], 0, 1))) ?></span>
-          <a href="<?= h(community_url($post['community'])) ?>"><b><?= h($post['cname']) ?></b></a>
+          <b><?= h($post['cname']) ?></b>
           <span>• <?= h($post['author']) ?></span>
-          <?php if ($mode === 'newest' && $post['approvedAt'] !== null): ?>
-            <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['approvedAt'], 1000))) ?>">• Approved <?= h(date_time_label((int)$post['approvedAt'])) ?> · <?= h(ago((int)$post['approvedAt'])) ?> ago</time>
-          <?php else: ?>
-            <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
-          <?php endif; ?>
+          <time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['created'], 1000))) ?>">• Posted <?= h(date_time_label((int)$post['created'])) ?></time>
           <?php if ($post['status'] === 'removed'): ?>
             <?php if ($post['removedAt'] !== null): ?><time datetime="<?= h(date(DATE_ATOM, intdiv((int)$post['removedAt'], 1000))) ?>">• Removed <?= h(date_time_label((int)$post['removedAt'])) ?></time>
             <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
           <?php endif; ?>
           <?php if ($post['pinned']): ?><span class="tag"><?= icon_svg('pin') ?> Pinned</span><?php endif; ?>
           <?php if ($post['locked']): ?><span class="tag">Comments locked</span><?php endif; ?>
-          <?php if (!in_array($mode, ['home', 'newest', 'community'], true)): ?><span class="tag <?= h($post['status']) ?>"><?= h($post['status']) ?></span><?php endif; ?>
+          <?php if ($mode !== 'home'): ?><span class="tag <?= h($post['status']) ?>"><?= h($post['status']) ?></span><?php endif; ?>
           <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?><?= $post['reportedAt'] !== null ? ' on ' . h(date_label((int)$post['reportedAt'])) : '' ?></span><?php endif; ?>
         </div>
         <h3><a href="<?= $postUrl ?>"><?= h($post['title']) ?></a></h3>
@@ -100,6 +72,24 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
   <p class="empty">Nothing to show here yet.</p>
 <?php endif; ?>
 
+<?php if ($mode === 'reported' && !empty($mobileReports)): ?>
+  <h3>Reports from the mobile app</h3>
+  <?php foreach ($mobileReports as $report): ?>
+    <article class="card">
+      <div>
+        <div class="meta">
+          <b><a href="mobile-post.php?id=<?= (int)$report['post_id'] ?>"><?= h($report['title']) ?></a></b>
+          <span>• Reported by <?= h($report['reporter_name'] ?: $report['reporter_username']) ?></span>
+          <time>• <?= h($report['created_at']) ?></time>
+        </div>
+        <?php if ($report['reason'] !== null && $report['reason'] !== ''): ?><p><b>Reason:</b> <?= h($report['reason']) ?></p><?php endif; ?>
+        <?php if ($report['additional_comments'] !== null && $report['additional_comments'] !== ''): ?><p><?= nl2br(h($report['additional_comments'])) ?></p><?php endif; ?>
+        <form method="post"><?= $csrf ?><input type="hidden" name="report_id" value="<?= (int)$report['id'] ?>"><button class="chip" name="action" value="mobile-dismiss-report">Dismiss report</button></form>
+      </div>
+    </article>
+  <?php endforeach; ?>
+<?php endif; ?>
+
 <?php if ($mode === 'home'): ?>
     </section>
     <aside class="home-insights" aria-label="Today's activity">
@@ -109,7 +99,6 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
             <h3 id="trending-title">Top 5 most-liked posts today</h3>
             <p>Today’s approved posts, ranked by likes</p>
           </div>
-          <?= icon_svg('heart') ?>
         </div>
         <?php if ($topLikedToday): ?>
           <ol class="top-liked-list">

@@ -9,7 +9,7 @@ class StateModel
     ) {
     }
 
-    protected function load(string $key, callable $seed): array
+    protected function load(string $key, callable $initializer): array
     {
         $statement = $this->db->prepare('SELECT state_data FROM admin_app_state WHERE user_id = ? AND state_key = ?');
         $statement->execute([$this->userId, $key]);
@@ -22,18 +22,16 @@ class StateModel
             return $decoded;
         }
 
-        $initial = $seed();
+        $initial = $initializer();
         $this->save($key, $initial);
         return $initial;
     }
 
     protected function save(string $key, array $data): void
     {
-        $upsert = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
-            ? 'ON CONFLICT(user_id, state_key) DO UPDATE SET state_data = excluded.state_data'
-            : 'ON DUPLICATE KEY UPDATE state_data = VALUES(state_data)';
         $statement = $this->db->prepare(
-            'INSERT INTO admin_app_state (user_id, state_key, state_data) VALUES (?, ?, ?) ' . $upsert
+            'INSERT INTO admin_app_state (user_id, state_key, state_data) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE state_data = VALUES(state_data)'
         );
         $statement->execute([
             $this->userId,

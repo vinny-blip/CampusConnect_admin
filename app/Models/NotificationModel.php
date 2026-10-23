@@ -7,16 +7,7 @@ final class NotificationModel extends StateModel
 
     private function all(): array
     {
-        return $this->load(self::KEY, static function (): array {
-            $now = (int)(microtime(true) * 1000);
-            return [
-                ['id' => 1, 'text' => "A post in Educ'ers was reported for harassment.", 'link' => 'queues.php?tab=reported', 't' => $now - 12 * 60000, 'read' => false],
-                ['id' => 2, 'text' => 'New mod mail: "Why was my post removed?"', 'link' => 'modmail.php?t=1', 't' => $now - 90 * 60000, 'read' => false],
-                ['id' => 3, 'text' => 'HANDA Official sent you a message.', 'link' => 'messages.php?t=6', 't' => $now - 180 * 60000, 'read' => false],
-                ['id' => 4, 'text' => 'Your community list was updated.', 'link' => 'communities.php', 't' => $now - 1500 * 60000, 'read' => true],
-                ['id' => 5, 'text' => 'Weekly summary: see what happened in your communities.', 'link' => 'overview.php', 't' => $now - 3000 * 60000, 'read' => true],
-            ];
-        });
+        return $this->load(self::KEY, static fn() => []);
     }
 
     public function list(): array

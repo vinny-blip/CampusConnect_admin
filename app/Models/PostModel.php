@@ -4,190 +4,14 @@ declare(strict_types=1);
 final class PostModel extends StateModel
 {
     private const POSTS = 'posts';
-    private const SAVED = 'saved';
     private const LOG = 'log';
     private const REPORT_HISTORY = 'report_history';
-    private const REPORT_SAMPLE_VERSION = 'report_sample_version';
-    private const SLUGS = ['itters', 'engineering', 'educers', 'cbaers', 'designatmobbin'];
-    private const TITLES = [
-        'Hi! Can anyone help me with this one, please?',
-        'How do I solve this limit problem?',
-        'Anyone have notes for Calculus 2 midterms?',
-        'Is the library open on weekends?',
-        'Looking for a study group for Physics 101',
-        'Can someone explain this derivative rule?',
-        'Selling my used Engineering textbook',
-        'Who has the schedule for enrollment week?',
-    ];
-    private const REPORTED_EXAMPLES = [
-        0 => [
-            'title' => 'Paid exam answers and streaming accounts',
-            'body' => 'DM me for paid access to exam answer keys and streaming accounts. This is an unrelated promotion, not an academic discussion.',
-            'reason' => 'Non-academic content',
-        ],
-        6 => [
-            'title' => 'Personal attack in the calculus discussion',
-            'body' => 'You are clueless and should stop asking basic questions. Nobody wants to help you.',
-            'reason' => 'Toxic or harassing content',
-        ],
-        12 => [
-            'title' => 'Uncredited lab conclusion submitted as original work',
-            'body' => 'This conclusion was copied from another student’s lab report and is being shared here as original work: “The results support the hypothesis because the measured values followed the predicted pattern.”',
-            'reason' => 'Plagiarized content',
-        ],
-        30 => [
-            'title' => 'Repeated tutoring-service advertisement',
-            'body' => 'Buy my assignment-writing and tutoring package. Message me for prices. This promotion is unrelated to the course discussion.',
-            'reason' => 'Non-academic content',
-        ],
-    ];
     private const REPORT_REASONS = [
         'Non-academic content', 'Toxic or harassing content', 'Plagiarized content', 'Other guideline violation',
     ];
-    private const COMMENTS = [
-        ['Juan Dela Cruz', 'The road near Lacson Street is flooded, take another route.'],
-        ['Maria Santos', 'Thanks for the update! Very helpful.'],
-        ['HANDA Official', 'The evacuation center is open until 8 PM.'],
-        ['Ana Reyes', 'Same question here, following this thread.'],
-        ['Carlo Lim', 'Try the notes posted in the group files.'],
-    ];
-
     private function all(): array
     {
-        $posts = $this->load(self::POSTS, fn() => $this->seedPosts());
-        $sampleVersion = $this->load(self::REPORT_SAMPLE_VERSION, static fn() => []);
-        if ((int)($sampleVersion[0] ?? 0) < 1) {
-            $this->updateSeedReportedExamples($posts);
-            $this->save(self::REPORT_SAMPLE_VERSION, [1]);
-        }
-        return $posts;
-    }
-
-    private function seedPosts(): array
-    {
-        $posts = [];
-        foreach (range(0, 39) as $i) {
-            $status = $i % 5 === 4 ? 'approved' : 'pending';
-            $example = self::REPORTED_EXAMPLES[$i] ?? null;
-            $reported = $status === 'pending' && $example !== null;
-            $created = $this->ago(5 + $i * 13);
-            $commentCount = $i === 0 ? 3 : $i % 5;
-            $comments = [];
-            for ($k = 0; $k < $commentCount; $k++) {
-                $source = self::COMMENTS[($i + $k) % count(self::COMMENTS)];
-                $comments[] = [
-                    'id' => $k + 1,
-                    'author' => $source[0],
-                    'text' => $source[1],
-                    'created' => $this->ago(15 + $k * 20),
-                    'reportedAt' => null,
-                    'hidden' => false,
-                    'likes' => ($k * 5 + $i) % 15,
-                    'hearts' => ($k * 3 + $i) % 12,
-                ];
-            }
-            $posts[] = [
-                'id' => $i + 1,
-                'author' => 'anonymous' . ($i + 1),
-                'community' => self::SLUGS[$i % count(self::SLUGS)],
-                'title' => $example['title'] ?? ($i === 0 ? 'Cherish the moments with your friends!' : self::TITLES[$i % count(self::TITLES)]),
-                'body' => $example['body'] ?? ($i === 0
-                    ? 'Take a moment today to thank the people who made this semester easier. Share a memory with your friends in the comments.'
-                    : 'Posted by a student. Replies and notes from classmates are welcome in the comments.'),
-                'image' => $this->art($i),
-                'created' => $created,
-                'approvedAt' => $status === 'approved' ? $created : null,
-                'removedAt' => null,
-                'likes' => ($i * 7) % 45 + 3,
-                'liked' => false,
-                'pinned' => false,
-                'locked' => false,
-                'tags' => [],
-                'status' => $status,
-                'reported' => $reported,
-                'reportReason' => $reported ? $example['reason'] : '',
-                'reportedAt' => $reported ? $created : null,
-                'reviewed' => false,
-                'commentList' => $comments,
-            ];
-            if ($reported) {
-                $this->recordReport($created);
-            }
-        }
-        $this->save(self::SAVED, []);
-        $this->save(self::LOG, []);
-        return $posts;
-    }
-
-    private function updateSeedReportedExamples(array &$posts): void
-    {
-        $changed = false;
-        foreach ($posts as &$post) {
-            $id = (int)($post['id'] ?? 0);
-            $index = $id - 1;
-            if ($index < 0 || $index >= 40
-                || ($post['author'] ?? '') !== 'anonymous' . $id
-                || ($post['status'] ?? '') !== 'pending') {
-                continue;
-            }
-            $defaultTitle = $index === 0
-                ? 'Cherish the moments with your friends!'
-                : self::TITLES[$index % count(self::TITLES)];
-            $defaultBody = $index === 0
-                ? 'Take a moment today to thank the people who made this semester easier. Share a memory with your friends in the comments.'
-                : 'Posted by a student. Replies and notes from classmates are welcome in the comments.';
-            if (($post['title'] ?? '') !== $defaultTitle || ($post['body'] ?? '') !== $defaultBody || empty($post['reported'])) {
-                continue;
-            }
-
-            $example = self::REPORTED_EXAMPLES[$index] ?? null;
-            if ($example !== null) {
-                $post['title'] = $example['title'];
-                $post['body'] = $example['body'];
-                $post['reportReason'] = $example['reason'];
-                if (empty($post['reportedAt'])) {
-                    $post['reportedAt'] = (int)$post['created'];
-                    $this->recordReport((int)$post['reportedAt']);
-                }
-            } else {
-                $post['reported'] = false;
-                $post['reportReason'] = '';
-                $post['reportedAt'] = null;
-            }
-            $changed = true;
-        }
-        unset($post);
-        if ($changed) {
-            $this->save(self::POSTS, $posts);
-        }
-    }
-
-    private function ago(int $minutes): int
-    {
-        return (int)(microtime(true) * 1000) - $minutes * 60000;
-    }
-
-    private function art(int $seed): string
-    {
-        $palette = [['#9ccbff', '#b2b0d6'], ['#c8e6a0', '#8fcf7a'], ['#ffd9a0', '#f4a6a0'], ['#d4c4f0', '#9ccbff'], ['#bfe9e1', '#8bc4d8']];
-        $dots = ['#e63946', '#f4a261', '#2a9d8f', '#9b5de5', '#ffd166', '#4d96ff'];
-        [$background, $ground] = $palette[$seed % count($palette)];
-        $circles = '';
-        foreach ($dots as $i => $color) {
-            $angle = ($i / 6) * M_PI * 2;
-            $x = number_format(160 + cos($angle) * 55, 1, '.', '');
-            $y = number_format(95 + sin($angle) * 30, 1, '.', '');
-            $circles .= '<circle cx="' . $x . '" cy="' . $y . '" r="14" fill="' . $color . '"/>';
-        }
-        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 190"><rect width="320" height="190" fill="'
-            . $background . '"/><ellipse cx="160" cy="105" rx="120" ry="60" fill="' . $ground . '"/>'
-            . $circles . '</svg>';
-        return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($svg);
-    }
-
-    private function savedIds(): array
-    {
-        return $this->load(self::SAVED, static fn() => []);
+        return $this->load(self::POSTS, static fn() => []);
     }
 
     private function log(string $moderator, string $action, array $post): void
@@ -259,7 +83,6 @@ final class PostModel extends StateModel
         }
         unset($comment);
         $post['commentCount'] = count($post['commentList']);
-        $post['saved'] = in_array($post['id'], $this->savedIds(), true);
         return $post;
     }
 
@@ -589,7 +412,6 @@ final class PostModel extends StateModel
             $this->log($moderator, 'Deleted', $post);
             unset($posts[$index]);
             $this->save(self::POSTS, array_values($posts));
-            $this->save(self::SAVED, array_values(array_diff($this->savedIds(), [$id])));
             return true;
         }
         return false;
@@ -673,24 +495,6 @@ final class PostModel extends StateModel
                 $post['pinned'] = !$post['pinned'];
             }
         });
-    }
-
-    public function toggleSave(int $id): bool
-    {
-        $ids = $this->savedIds();
-        $saved = !in_array($id, $ids, true);
-        $ids = $saved ? [...$ids, $id] : array_values(array_diff($ids, [$id]));
-        $this->save(self::SAVED, $ids);
-        return $saved;
-    }
-
-    public function saved(): array
-    {
-        $ids = $this->savedIds();
-        return array_map(fn($post) => $this->enrich($post), array_values(array_filter(
-            $this->all(),
-            static fn($post) => in_array($post['id'], $ids, true)
-        )));
     }
 
     public function addComment(int $postId, string $author, string $text, ?array $aiReview = null): bool
@@ -950,8 +754,4 @@ final class PostModel extends StateModel
         return array_slice($this->load(self::LOG, static fn() => []), 0, $limit);
     }
 
-    public function reset(): void
-    {
-        $this->save(self::POSTS, $this->seedPosts());
-    }
 }

@@ -1,24 +1,23 @@
 <?php
 declare(strict_types=1);
 
-// Hostinger does not expose Apache environment variables by default. Create
-// config/database.local.php on the server to override these values.
 $config = [
-    'db_host' => getenv('CC_DB_HOST') ?: '127.0.0.1',
-    'db_port' => getenv('CC_DB_PORT') ?: '3306',
-    'db_name' => getenv('CC_DB_NAME') ?: 'campusconnect',
-    'db_user' => getenv('CC_DB_USER') ?: 'root',
-    'db_password' => getenv('CC_DB_PASSWORD') ?: '',
-    'admin_email' => getenv('CC_ADMIN_EMAIL') ?: 's2300416@usls.edu.ph',
+    // Hostinger's MySQL server is local to the hosted PHP account.
+    'db_host' => 'localhost',
+    'db_port' => '3306',
+    'db_name' => 'u793073111_campusconnect',
+    'db_user' => 'u793073111_campusconnect',
+    'db_password' => getenv('CC_DB_PASSWORD') ?: 'CampusConnect1210713',
 ];
 
-$localConfig = __DIR__ . '/database.local.php';
-if (is_file($localConfig)) {
-    $overrides = require $localConfig;
-    if (!is_array($overrides)) {
-        throw new RuntimeException('config/database.local.php must return an array.');
+$required = ['db_host', 'db_port', 'db_name', 'db_user', 'db_password'];
+foreach ($required as $key) {
+    if (!array_key_exists($key, $config) || trim((string)$config[$key]) === '') {
+        if ($key === 'db_password') {
+            throw new RuntimeException('Hostinger database password is missing. Set CC_DB_PASSWORD in the server environment.');
+        }
+        throw new RuntimeException("Hostinger database configuration is missing {$key}.");
     }
-    $config = array_replace($config, $overrides);
 }
 
 return $config;

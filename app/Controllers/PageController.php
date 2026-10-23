@@ -6,15 +6,12 @@ final class PageController
     private ?PDO $db = null;
     private ?UserModel $users = null;
     private ?array $user = null;
-    private ?CommunityModel $communities = null;
     private ?PostModel $posts = null;
-    private ?InboxModel $inbox = null;
     private ?NotificationModel $notifications = null;
     private ?RestrictedModel $restricted = null;
     private ?AiModerationModel $aiModeration = null;
+    private ?MobileModerationModel $mobile = null;
     private string $page;
-    private bool $databaseUnavailable = false;
-    private bool $usingLocalStorage = false;
 
     public function __construct(string $page)
     {
@@ -29,45 +26,27 @@ final class PageController
         try {
             $this->db = Database::connection();
             $this->users = new UserModel($this->db);
-            $this->usingLocalStorage = Database::usingLocalStorage();
-        } catch (PDOException $exception) {
-            if ($this->page === 'login') {
-                $this->databaseUnavailable = true;
-                return;
-            }
+        } catch (RuntimeException $exception) {
             error_log($exception->getMessage());
             http_response_code(503);
+            $message = h($exception->getMessage());
             exit('<!doctype html><html lang="en"><meta charset="utf-8"><title>Database setup required</title>'
-                . '<body><h1>CampusConnect needs MySQL</h1><p>Start MySQL in XAMPP and import '
-                . '<code>config/database.sql</code> in phpMyAdmin, then reload this page.</p></body></html>');
+                . '<body><h1>CampusConnect needs MySQL</h1><p>' . $message . '</p>'
+                . '<p>Verify the Hostinger database settings and imported schema, then reload this page.</p></body></html>');
         }
     }
 
     public function run(): void
     {
-        if ($this->page === 'designatmobbin') {
-            $this->page = 'community';
-            $_GET['c'] = 'designatmobbin';
-        }
-
         $this->user = $this->users !== null && isset($_SESSION['user_id'])
             ? $this->users->findById((int)$_SESSION['user_id'])
             : null;
-        if ($this->users !== null && isset($_SESSION['offline_demo_login']) && $_SESSION['offline_demo_login'] === true) {
-            $this->user = $this->users->findByEmail('mod@campus.edu.ph');
-            if ($this->user !== null) {
-                $_SESSION['user_id'] = (int)$this->user['id'];
-                unset($_SESSION['offline_demo_login']);
-            }
-        } elseif ($this->databaseUnavailable && !empty($_SESSION['offline_demo_login'])) {
-            $this->user = ['id' => 0, 'name' => 'Demo Moderator', 'email' => 'mod@campus.edu.ph'];
-        }
         if ($this->users !== null && isset($_SESSION['user_id']) && $this->user === null) {
             unset($_SESSION['user_id']);
         }
 
         if (in_array($this->page, ['login', 'register'], true)) {
-            if ($this->user !== null && !$this->databaseUnavailable) {
+            if ($this->user !== null) {
                 $this->redirect('home.php');
             }
         } elseif ($this->user === null) {
@@ -91,12 +70,6 @@ final class PageController
             }
             $this->redirect('notifications.php');
         }
-        if (in_array($this->page, ['modmail', 'messages'], true) && isset($_GET['t'])) {
-            $thread = $this->inbox->get((int)$_GET['t']);
-            if ($thread !== null && $thread['box'] === ($this->page === 'modmail' ? 'mod' : 'dm')) {
-                $this->inbox->markRead((int)$thread['id']);
-            }
-        }
         if ($this->page === 'post' && isset($_GET['id'])) {
             $reviewPost = $this->posts->get((int)$_GET['id']);
             if ($reviewPost !== null) {
@@ -112,20 +85,17 @@ final class PageController
             $this->page,
             $data,
             $flash,
-            $csrf,
-            $this->databaseUnavailable,
-            $this->usingLocalStorage
+            $csrf
         );
     }
 
     private function initializeModels(int $userId): void
     {
-        $this->communities = new CommunityModel($this->db, $userId);
         $this->posts = new PostModel($this->db, $userId);
-        $this->inbox = new InboxModel($this->db, $userId);
         $this->notifications = new NotificationModel($this->db, $userId);
         $this->restricted = new RestrictedModel($this->db);
         $this->aiModeration = new AiModerationModel($this->db);
+        $this->mobile = new MobileModerationModel($this->db, $userId);
     }
 
     private function handlePost(): void
@@ -141,24 +111,13 @@ final class PageController
         if ($this->page === 'login' && $action === 'login') {
             $email = mb_strtolower(trim((string)($_POST['email'] ?? '')));
             $password = (string)($_POST['password'] ?? '');
-            if ($this->users === null) {
-                $user = hash_equals('mod@campus.edu.ph', $email) && hash_equals('mod12345', $password)
-                    ? ['id' => 0, 'name' => 'Demo Moderator', 'email' => 'mod@campus.edu.ph']
-                    : null;
-            } else {
-                $user = $this->users->login($email, $password);
-            }
+            $user = $this->users->login($email, $password);
             if ($user === null) {
                 $this->flash('Wrong email or password.', 'error');
                 $this->redirect('login.php');
             }
             session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
-            if ($this->databaseUnavailable) {
-                $_SESSION['offline_demo_login'] = true;
-                $this->flash('Demo login verified. Set up a database to use the dashboard.');
-                $this->redirect('login.php');
-            }
             $this->redirect('home.php');
         }
         if ($this->page === 'register' && $action === 'register') {
@@ -184,10 +143,13 @@ final class PageController
         }
 
         $allowedActions = match ($this->page) {
-            'home', 'newest', 'posts', 'control', 'saved', 'reported', 'search', 'community'
-                => ['like', 'save', 'pin', 'restore', 'remove'],
+            'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments', 'mobile-users',
+            'home', 'posts', 'control', 'reported', 'queues', 'comments'
+                => ['mobile-approve', 'mobile-remove', 'mobile-pending', 'mobile-hide-comment', 'mobile-restore-comment', 'mobile-suspend-user', 'mobile-restore-user', 'mobile-dismiss-report', 'toggle-ai-moderation'],
+            'home', 'posts', 'control', 'reported', 'search'
+                => ['like', 'pin', 'restore', 'remove', 'mobile-dismiss-report'],
             'post' => [
-                'approve', 'remove', 'save', 'like-comment', 'heart-comment', 'comment',
+                'approve', 'remove', 'like-comment', 'heart-comment', 'comment',
                 'clear-post-report', 'clear-comment-report',
                 'delete-comment', 'hide-comment', 'restore-comment', 'delete-post', 'edit-post', 'toggle-lock',
             ],
@@ -195,12 +157,8 @@ final class PageController
                 'approve', 'remove', 'toggle-ai-moderation', 'clear-post-report',
                 'clear-comment-report', 'delete-comment', 'hide-comment', 'delete-post', 'approve-ai-comment',
             ],
-            'create' => ['create-post'],
-            'communities' => ['star', 'leave', 'Alumni', 'Advisor'],
-            'create-community' => ['create-community'],
-            'modmail', 'messages' => ['reply', 'new-message'],
             'notifications' => ['read-all'],
-            'profile' => ['update-name', 'reset'],
+            'profile' => ['update-name'],
             'restricted' => ['restrict', 'unrestrict'],
             'comments' => ['delete-comment', 'clear-comment-report', 'hide-comment', 'restore-comment'],
             default => [],
@@ -208,6 +166,36 @@ final class PageController
         if (!in_array($action, $allowedActions, true)) {
             http_response_code(400);
             exit('Unsupported form action.');
+        }
+        if (str_starts_with($this->page, 'mobile-') || in_array($this->page, ['home', 'posts', 'control', 'reported', 'queues', 'comments'], true)) {
+            if ($action === 'toggle-ai-moderation') {
+                $this->aiModeration->setEnabled((string)($_POST['enabled'] ?? '0') === '1');
+                $this->flash('AI Moderation setting updated.');
+            } elseif ($action === 'mobile-remove') {
+                $removed = $this->mobile->removePost((int)($_POST['post_id'] ?? 0));
+                $this->flash($removed ? 'Mobile post removed and the user was notified.' : 'Mobile post was not found.', $removed ? 'success' : 'error');
+            } elseif ($action === 'mobile-approve' || $action === 'mobile-remove' || $action === 'mobile-pending') {
+                $status = ['mobile-approve' => 'approved', 'mobile-remove' => 'removed', 'mobile-pending' => 'pending'][$action];
+                $this->mobile->setPostStatus((int)($_POST['post_id'] ?? 0), $status, (string)($_POST['reason'] ?? ''));
+                $this->flash('Mobile post status updated.');
+            } elseif ($action === 'mobile-hide-comment' || $action === 'mobile-restore-comment') {
+                $status = $action === 'mobile-hide-comment' ? 'hidden' : 'approved';
+                $this->mobile->setCommentStatus((int)($_POST['comment_id'] ?? 0), $status);
+                $this->flash('Mobile comment status updated.');
+            } elseif ($action === 'mobile-suspend-user' || $action === 'mobile-restore-user') {
+                $status = $action === 'mobile-suspend-user' ? 'suspended' : 'active';
+                $this->mobile->setUserStatus((int)($_POST['user_id'] ?? 0), $status, (string)($_POST['reason'] ?? ''));
+                $this->flash('Mobile user status updated.');
+            } elseif ($action === 'mobile-dismiss-report') {
+                $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
+                $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
+            }
+            $this->redirect($this->returnUrl());
+        }
+        if ($action === 'mobile-dismiss-report') {
+            $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
+            $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
+            $this->redirect($this->returnUrl());
         }
 
         $postId = (int)($_POST['post_id'] ?? ($this->page === 'post' ? ($_GET['id'] ?? 0) : 0));
@@ -221,7 +209,7 @@ final class PageController
             );
         }
 
-        if (in_array($action, ['create-post', 'comment'], true)
+        if ($action === 'comment'
             && $this->restricted->isRestricted((int)$this->user['id'])) {
             $this->flash('Your account is restricted from posting and commenting.', 'error');
             $this->redirect($this->returnUrl());
@@ -229,13 +217,10 @@ final class PageController
 
         switch ($this->page) {
             case 'home':
-            case 'newest':
             case 'posts':
             case 'control':
-            case 'saved':
             case 'reported':
             case 'search':
-            case 'community':
                 $this->handleFeedAction($action);
                 break;
             case 'post':
@@ -243,28 +228,6 @@ final class PageController
                 break;
             case 'queues':
                 $this->handleQueueAction($action);
-                break;
-            case 'create':
-                $this->handleCreatePost();
-                break;
-            case 'communities':
-                $this->handleCommunityAction($action);
-                break;
-            case 'create-community':
-                $result = $this->communities->create(
-                    (string)($_POST['community_name'] ?? ''),
-                    (string)($_POST['community_description'] ?? ''),
-                    (string)($_POST['community_category'] ?? '')
-                );
-                if (isset($result['error'])) {
-                    $this->flash($result['error'], 'error');
-                    $this->redirect('create-community.php');
-                }
-                $this->flash('Community created.');
-                $this->redirect('communities.php');
-            case 'modmail':
-            case 'messages':
-                $this->handleInboxAction($action);
                 break;
             case 'notifications':
                 if ($action === 'read-all') {
@@ -290,8 +253,6 @@ final class PageController
         $id = (int)($_POST['post_id'] ?? 0);
         if ($action === 'like') {
             $this->posts->toggleLike($id);
-        } elseif ($action === 'save') {
-            $this->flash($this->posts->toggleSave($id) ? 'Saved.' : 'Removed from saved.');
         } elseif ($action === 'pin') {
             $this->posts->togglePin($id);
         } elseif ($action === 'restore') {
@@ -384,8 +345,6 @@ final class PageController
             if (!isset($result['error']) && isset($_GET['review'])) {
                 $this->redirect('queues.php');
             }
-        } elseif ($action === 'save') {
-            $this->flash($this->posts->toggleSave($id) ? 'Saved.' : 'Removed from saved.');
         } elseif ($action === 'delete-post') {
             $deleted = $this->posts->deletePost($id, $this->user['name']);
             $this->flash($deleted ? 'Post permanently deleted.' : 'Post is no longer reported or does not exist.', $deleted ? 'success' : 'error');
@@ -461,49 +420,6 @@ final class PageController
         }
     }
 
-    private function handleCreatePost(): void
-    {
-        $image = '';
-        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
-            $file = $_FILES['image'];
-            if ($file['error'] !== UPLOAD_ERR_OK) {
-                $this->flash('The image could not be uploaded. Check your server upload limits and try again.', 'error');
-                return;
-            }
-            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
-            $allowed = ['image/jpeg' => 'jpeg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
-            if (!isset($allowed[$mime]) || getimagesize($file['tmp_name']) === false) {
-                $this->flash('Choose a valid JPG, PNG, GIF, or WebP image.', 'error');
-                return;
-            }
-            $contents = file_get_contents($file['tmp_name']);
-            if ($contents === false) {
-                $this->flash('The image could not be read. Please try uploading it again.', 'error');
-                return;
-            }
-            $image = 'data:' . $mime . ';base64,' . base64_encode($contents);
-        }
-        $postData = $_POST;
-        $postData['image'] = $image;
-        $communitySlugs = array_column($this->communities->list(), 'slug');
-        $aiReview = $this->moderateSubmission(
-            trim((string)($postData['title'] ?? '') . "\n" . (string)($postData['body'] ?? '')),
-            $image
-        );
-        $result = $this->posts->add($postData, $this->user['name'], $communitySlugs, $aiReview);
-        if (isset($result['error'])) {
-            $this->flash($result['error'], 'error');
-        } elseif (!empty($aiReview['needsReview'])) {
-            $this->flash(!empty($aiReview['available'])
-                ? 'Post held for admin review after an AI flag.'
-                : 'AI check unavailable. Post held for admin review.');
-            $this->redirect('queues.php');
-        } else {
-            $this->flash('Post published.');
-            $this->redirect('post.php?id=' . $result['id']);
-        }
-    }
-
     private function moderateSubmission(string $text, string $image = ''): array
     {
         if (!$this->aiModeration->enabled()) {
@@ -515,43 +431,6 @@ final class PageController
         return $result;
     }
 
-    private function handleCommunityAction(string $action): void
-    {
-        $slug = (string)($_POST['slug'] ?? '');
-        $name = $this->communities->name($slug);
-        if ($action === 'star' || $action === 'leave' || in_array($action, ['Alumni', 'Advisor'], true)) {
-            $this->communities->change($slug, $action);
-        }
-        if (in_array($action, ['Alumni', 'Advisor'], true)) {
-            $this->notifications->add("{$action} role requested for {$name}.", 'communities.php');
-            $this->flash("{$action} role requested for {$name}.");
-        } elseif ($action === 'leave') {
-            $this->flash("You left {$name}.");
-        }
-    }
-
-    private function handleInboxAction(string $action): void
-    {
-        $box = $this->page === 'modmail' ? 'mod' : 'dm';
-        if ($action === 'reply') {
-            $this->inbox->reply((int)($_POST['thread_id'] ?? 0), (string)($_POST['text'] ?? ''));
-        } elseif ($action === 'new-message') {
-            $result = $this->inbox->create(
-                $box,
-                (string)($_POST['who'] ?? ''),
-                (string)($_POST['subject'] ?? ''),
-                (string)($_POST['text'] ?? '')
-            );
-            if (isset($result['error'])) {
-                $this->flash($result['error'], 'error');
-            } else {
-                $this->inbox->markRead((int)$result['id']);
-                $this->flash('Message sent.');
-                $this->redirect($this->page . '.php?t=' . $result['id']);
-            }
-        }
-    }
-
     private function handleProfileAction(string $action): void
     {
         if ($action === 'update-name') {
@@ -561,10 +440,6 @@ final class PageController
                 $this->user = $this->users->findById((int)$this->user['id']);
                 $this->flash('Profile updated.');
             }
-        } elseif ($action === 'reset') {
-            $statement = $this->db->prepare('DELETE FROM admin_app_state WHERE user_id = ?');
-            $statement->execute([(int)$this->user['id']]);
-            $this->flash('Demo data reset. Your account was kept.');
         }
     }
 
@@ -591,11 +466,30 @@ final class PageController
         $data = [
             'user' => $this->user,
             'noteCount' => $this->notifications->unread(),
-            'messageCount' => $this->inbox->unread('dm'),
-            'communities' => $this->communities->list(),
         ];
-        if (in_array($this->page, ['home', 'newest', 'posts', 'control', 'saved', 'reported', 'search', 'community'], true)) {
-            $data += $this->feedData();
+        if (in_array($this->page, ['home', 'posts', 'control', 'reported', 'queues', 'comments'], true)) {
+            $data['mobileAvailable'] = $this->mobile->available();
+            $data['mobileCounts'] = $this->mobile->counts();
+            $data['mobileQuery'] = trim((string)($_GET['q'] ?? ''));
+            $data['mobileStatus'] = $this->page === 'home'
+                ? 'approved'
+                : ($this->page === 'queues' || $this->page === 'reported' ? 'pending' : (string)($_GET['status'] ?? ''));
+            $data['mobilePosts'] = in_array($this->page, ['comments', 'reported'], true)
+                ? []
+                : $this->mobile->posts($data['mobileStatus'], $data['mobileQuery']);
+            $data['mobileComments'] = $this->page === 'comments'
+                ? $this->mobile->comments($data['mobileQuery'])
+                : [];
+            $data['mobileUsers'] = [];
+            $data['mobileReports'] = in_array($this->page, ['reported', 'queues'], true)
+                ? $this->mobile->reports($this->page === 'queues' ? 'pending' : 'pending', $data['mobileQuery'])
+                : [];
+            $data['mobileReportStatus'] = 'pending';
+            $data['aiModerationEnabled'] = $this->aiModeration->enabled();
+            $data['aiModerationConfigured'] = $this->aiModeration->configured();
+            $data['reportCountsByDate'] = $this->page === 'home'
+                ? $this->mobile->reportCountsByDate(14)
+                : [];
         } elseif ($this->page === 'queues') {
             $tab = (string)($_GET['tab'] ?? '');
             $kind = in_array($tab, ['reported', 'ai'], true) ? $tab : 'approve';
@@ -614,37 +508,47 @@ final class PageController
             $id = (int)($_GET['id'] ?? 0);
             $data['post'] = $this->posts->get($id);
             if ($data['post'] !== null) {
-                $data['post']['cname'] = $this->communities->name((string)$data['post']['community']);
+                $data['post']['cname'] = (string)$data['post']['community'];
             }
             $data['back'] = isset($_GET['review']) ? 'queues.php' : $this->safeReferrer();
             $data['replyTo'] = trim((string)($_GET['reply'] ?? ''));
         } elseif ($this->page === 'overview') {
-            $data['counts'] = $this->posts->counts();
-            $data['activity'] = $this->posts->activity();
-            $data['reportCountsByDate'] = $this->posts->reportCountsByDate();
-        } elseif ($this->page === 'communities') {
-            $data['communityCount'] = count($data['communities']);
-        } elseif ($this->page === 'create-community') {
-            $data['communityCount'] = count($data['communities']);
-        } elseif (in_array($this->page, ['modmail', 'messages'], true)) {
-            $box = $this->page === 'modmail' ? 'mod' : 'dm';
-            $currentId = (int)($_GET['t'] ?? 0);
-            $current = $currentId ? $this->inbox->get($currentId) : null;
-            if ($current !== null && $current['box'] !== $box) {
-                $current = null;
-            }
-            $data['box'] = $box;
-            $data['threads'] = $this->inbox->threads($box);
-            $data['current'] = $current;
+            $data['counts'] = $this->mobile->counts();
+            $data['counts']['toApprove'] = $data['counts']['pending'];
+            $data['activity'] = [];
+            $data['reportCountsByDate'] = $this->mobile->reportCountsByDate();
         } elseif ($this->page === 'notifications') {
             $data['notifications'] = $this->notifications->list();
         } elseif ($this->page === 'profile') {
             $data['counts'] = $this->posts->counts();
-            $data['savedCount'] = count($this->posts->saved());
         } elseif ($this->page === 'restricted') {
             $data['restrictedUsers'] = $this->restricted->list();
         } elseif ($this->page === 'comments') {
             $data['comments'] = $this->posts->comments();
+        } elseif (in_array($this->page, ['mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-comments', 'mobile-users'], true)) {
+            $data['mobileAvailable'] = $this->mobile->available();
+            $data['mobileCounts'] = $this->mobile->counts();
+            $query = trim((string)($_GET['q'] ?? ''));
+            $data['mobileQuery'] = $query;
+            if ($this->page === 'mobile-comments') {
+                $data['mobileComments'] = $this->mobile->comments($query);
+            } elseif ($this->page === 'mobile-reports') {
+                $status = (string)($_GET['status'] ?? 'pending');
+                $data['mobileReports'] = $this->mobile->reports($status, $query);
+                $data['mobileReportStatus'] = $status;
+            } elseif ($this->page === 'mobile-users') {
+                $data['mobileUsers'] = $this->mobile->users($query);
+            } else {
+                $status = $this->page === 'mobile-queues' ? (string)($_GET['status'] ?? 'pending') : (string)($_GET['status'] ?? '');
+                $data['mobilePosts'] = $this->mobile->posts($status, $query);
+                $data['mobileStatus'] = $status;
+            }
+        } elseif ($this->page === 'mobile-post') {
+            $data['mobileAvailable'] = $this->mobile->available();
+            $data['mobileCounts'] = $this->mobile->counts();
+            $data['mobilePost'] = $data['mobileAvailable']
+                ? $this->mobile->post((int)($_GET['id'] ?? 0))
+                : null;
         }
         return $data;
     }
@@ -656,50 +560,34 @@ final class PageController
             $status = '';
         }
         $query = trim((string)($_GET['q'] ?? ''));
-        $slug = trim((string)($_GET['c'] ?? 'designatmobbin'));
+        $slug = trim((string)($_GET['c'] ?? ''));
         $config = [
-            'home' => ['Home', 'Approved posts from the communities you moderate.', 'home'],
-            'newest' => ['Newest', 'The most recently approved posts first.', 'newest'],
-            'posts' => ['Posts', 'Every post across your communities. Filter by status.', 'posts'],
+            'home' => ['Home', 'Approved posts from your moderated feed.', 'home'],
+            'posts' => ['Posts', 'Every post in the moderation feed. Filter by status.', 'posts'],
             'control' => ['Control Posts/Feed', 'Pin or remove posts in the feed. Pending posts have to be checked in the queue first.', 'control'],
-            'saved' => ['Saved', 'Posts you saved for later.', 'saved'],
             'reported' => ['Reported', 'Posts that members reported. Review pending ones in the reported queue.', 'reported'],
         ];
         $title = $config[$this->page][0] ?? 'Search';
         $sub = $config[$this->page][1] ?? '';
         $posts = [];
-        $about = null;
-        $searchCommunities = [];
 
         if ($this->page === 'home') {
             $posts = $this->posts->find('approved', null, '', null, 'hot');
-        } elseif ($this->page === 'newest') {
-            $posts = $this->posts->find('approved', null, '', null, 'approved');
         } elseif ($this->page === 'posts' || $this->page === 'control') {
             $posts = $this->posts->find($status ?: null);
-        } elseif ($this->page === 'saved') {
-            $posts = $this->posts->saved();
         } elseif ($this->page === 'reported') {
             $posts = $this->posts->find(null, null, '', true);
-        } elseif ($this->page === 'community') {
-            $about = $this->communities->get($slug);
-            $title = $about['name'] ?? 'Community not found';
-            $sub = $about === null ? 'See your <a href="communities.php">communities</a>.' : '';
-            $posts = $about === null ? [] : $this->posts->find('approved', $slug, '', null, 'hot');
         } elseif ($this->page === 'search') {
             $posts = $this->posts->find(null, null, $query);
             $title = $query !== '' ? 'Results for “' . $query . '”' : 'Search';
             $sub = $query !== '' ? count($posts) . ' posts found.' : 'Type something in the search bar above.';
-            $searchCommunities = $this->communities->search($query);
         }
         return [
             'feedTitle' => $title,
             'feedSub' => $sub,
             'filter' => $status ?: 'all',
             'feedPosts' => $this->named($posts),
-            'about' => $about,
             'query' => $query,
-            'searchCommunities' => $searchCommunities,
             'mode' => $this->page,
             'topLikedToday' => $this->page === 'home' ? $this->posts->topLikedToday() : [],
             'reportCountsByDate' => $this->page === 'home' ? $this->posts->reportCountsByDate(7) : [],
@@ -709,7 +597,7 @@ final class PageController
     private function named(array $posts): array
     {
         foreach ($posts as &$post) {
-            $post['cname'] = $this->communities->name((string)$post['community']);
+            $post['cname'] = (string)$post['community'];
         }
         unset($post);
         return $posts;
