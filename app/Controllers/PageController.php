@@ -160,7 +160,7 @@ final class PageController
     /** Adds notifications for newly AI-flagged mobile posts and comments. */
     private function syncAiFlaggedPostNotifications(): void
     {
-        if (!$this->mobile->available()) {
+        if ($this->mobile === null || $this->notifications === null || !$this->mobile->available()) {
             return;
         }
         $notifications = [];
