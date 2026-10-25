@@ -1,7 +1,7 @@
 <h2>Overview</h2>
 <p class="sub">What needs your attention across your communities.</p>
 <div class="stats">
-  <a class="stat" href="queues.php"><b><?= (int)$counts['toApprove'] ?></b>To approve</a>
+  <a class="stat" href="control.php?status=pending"><b><?= (int)$counts['toApprove'] ?></b>To approve</a>
   <a class="stat" href="reported.php"><b><?= (int)$counts['reported'] ?></b>Reported</a>
   <a class="stat" href="posts.php?status=approved"><b><?= (int)$counts['approved'] ?></b>Approved posts</a>
   <a class="stat" href="posts.php?status=removed"><b><?= (int)$counts['removed'] ?></b>Removed posts</a>

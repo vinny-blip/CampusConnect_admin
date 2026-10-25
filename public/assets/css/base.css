@@ -1,0 +1,41 @@
+/* ==========================================================================
+   Base & CSS Variables
+   ========================================================================== */
+
+:root {
+  --sky: #b0d4ff;
+  --card: #adadb2;
+  --shell: #e6e6e6;
+  --panel: #f4f4f4;
+  --ink: #1f2540;
+  --blue: #9ccbff;
+  --line: #8b8f9c;
+  --red: #c0392b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Poppins', system-ui, sans-serif;
+  background: var(--sky);
+  color: var(--ink);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+

@@ -9,7 +9,7 @@
         <div><?= $comment['hidden'] ? ($comment['aiNeedsReview'] ? '<em>Comment held for AI review.</em>' : '<em>Comment hidden by a moderator.</em>') : h($comment['text']) ?></div>
         <?php if ($comment['aiNeedsReview']): ?>
           <span class="flag"><?= $comment['aiReviewError'] ? 'AI check unavailable' : 'AI flagged' ?><?= $comment['aiCategories'] ? ': ' . h(implode(', ', $comment['aiCategories'])) : '' ?></span>
-          <a href="queues.php?tab=ai">Review AI hold</a>
+          <a href="comments.php">Review AI hold</a>
         <?php endif; ?>
         <?php if ($comment['reported']): ?>
           <span class="flag">Reported: <?= h($comment['reportReason']) ?><?= $comment['reportedAt'] !== null ? ' on ' . h(date_label((int)$comment['reportedAt'])) : '' ?></span>

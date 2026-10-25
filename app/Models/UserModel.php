@@ -9,7 +9,7 @@ final class UserModel
 
     public function findById(int $id): ?array
     {
-        $statement = $this->db->prepare('SELECT id, name, email, role FROM admin_users WHERE id = ?');
+        $statement = $this->db->prepare('SELECT id, name, email, role, profile_image FROM admin_users WHERE id = ?');
         $statement->execute([$id]);
         $user = $statement->fetch();
         return $user ? $this->withRole($user) : null;
@@ -74,6 +74,26 @@ final class UserModel
         }
         $statement = $this->db->prepare('UPDATE admin_users SET name = ? WHERE id = ?');
         $statement->execute([$name, $id]);
+        return true;
+    }
+
+    public function updateProfileImage(int $id, string $path): void
+    {
+        $statement = $this->db->prepare('UPDATE admin_users SET profile_image = ? WHERE id = ?');
+        $statement->execute([$path, $id]);
+    }
+
+    public function changePassword(int $id, string $currentPassword, string $newPassword): bool
+    {
+        $statement = $this->db->prepare('SELECT password_hash FROM admin_users WHERE id = ?');
+        $statement->execute([$id]);
+        $passwordHash = $statement->fetchColumn();
+        if (!is_string($passwordHash) || !password_verify($currentPassword, $passwordHash)) {
+            return false;
+        }
+
+        $statement = $this->db->prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?');
+        $statement->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
         return true;
     }
 

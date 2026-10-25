@@ -61,4 +61,52 @@ final class NotificationModel extends StateModel
         ];
         $this->save(self::KEY, $all);
     }
+
+    public function addOnce(string $text, string $link): void
+    {
+        $this->addManyOnce([['text' => $text, 'link' => $link]]);
+    }
+
+    public function addManyOnce(array $items): void
+    {
+        $all = $this->all();
+        $linkIndexes = [];
+        foreach ($all as $index => $existing) {
+            if (isset($existing['link'])) {
+                $linkIndexes[$existing['link']] = $index;
+            }
+        }
+        $ids = array_map('intval', array_column($all, 'id'));
+        $nextId = $ids ? max($ids) + 1 : 1;
+        $changed = false;
+
+        foreach ($items as $item) {
+            $text = (string)($item['text'] ?? '');
+            $link = (string)($item['link'] ?? '');
+            if ($text === '' || $link === '') {
+                continue;
+            }
+            if (isset($linkIndexes[$link])) {
+                $index = $linkIndexes[$link];
+                if (($all[$index]['text'] ?? '') !== $text) {
+                    $all[$index]['text'] = $text;
+                    $changed = true;
+                }
+                continue;
+            }
+            $all[] = [
+                'id' => $nextId++,
+                'text' => $text,
+                'link' => $link,
+                't' => (int)(microtime(true) * 1000),
+                'read' => false,
+            ];
+            $linkIndexes[$link] = count($all) - 1;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $this->save(self::KEY, $all);
+        }
+    }
 }

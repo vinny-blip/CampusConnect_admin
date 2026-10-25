@@ -1,0 +1,633 @@
+/* ==========================================================================
+   UI Components (Buttons, Chips, Avatars, Badges, Modals, Forms, Alerts)
+   ========================================================================== */
+
+/* Avatars */
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #e8b4a0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  position: relative;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.avatar.sm {
+  width: 22px;
+  height: 22px;
+  font-size: 0.6rem;
+}
+
+.avatar.big {
+  width: 56px;
+  height: 56px;
+  font-size: 1rem;
+}
+
+.avatar.profile-image {
+  overflow: hidden;
+}
+
+.avatar.profile-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0 22px;
+}
+
+.profile-summary .sub {
+  margin: 4px 0 0;
+}
+
+/* Badges & Icons */
+.icon-btn {
+  position: relative;
+  font-size: 1.05rem;
+}
+
+.badge {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.6rem;
+  display: grid;
+  place-items: center;
+}
+
+.badge:empty {
+  display: none;
+}
+
+.badge.has-unread {
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.16);
+}
+
+.web-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  vertical-align: middle;
+}
+
+.top-actions .web-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: #4d96ff;
+  vertical-align: middle;
+}
+
+/* Buttons & Links */
+.button {
+  display: inline-block;
+  padding: 7px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button.primary {
+  background: var(--blue);
+}
+
+.button.danger,
+.chip.danger {
+  background: #f5c6c0;
+}
+
+.button:hover,
+.chip:hover {
+  filter: brightness(0.95);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.chip.ok {
+  background: var(--blue);
+}
+
+.chip .web-icon,
+.tag .web-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: #e3e3e8;
+}
+
+.tag.approved {
+  background: #cfeedd;
+}
+
+.tag.removed {
+  background: #f5c6c0;
+}
+
+.tag.pending {
+  background: #fff0c2;
+}
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #3b2bff;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.acts {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.acts button {
+  padding: 3px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.acts .ok {
+  background: var(--blue);
+}
+
+.acts button:hover {
+  filter: brightness(0.95);
+}
+
+.acts a {
+  display: inline-block;
+  padding: 3px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.acts button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page a {
+  color: #3b2bff;
+}
+
+.page .brand,
+.page .tabs a,
+.page .acts a,
+.page .button,
+.page .chip {
+  color: var(--ink);
+}
+
+/* Forms */
+.form {
+  max-width: 560px;
+}
+
+.form label {
+  display: block;
+  margin-top: 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.form input,
+.form textarea,
+.form select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.form .button {
+  margin-top: 14px;
+}
+
+.profile-form {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.profile-form h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.form .password-field input {
+  padding-right: 76px;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #426b9a;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.password-visibility-toggle:hover {
+  background: #edf4ff;
+}
+
+.profile-form input[type="file"] {
+  min-height: 52px;
+  padding: 8px;
+  border: 1px dashed #9bbce3;
+  border-radius: 10px;
+  background: #f7faff;
+  color: #5c5f6c;
+  cursor: pointer;
+}
+
+.profile-form input[type="file"]:hover {
+  border-color: #6698d1;
+  background: #f0f6ff;
+}
+
+.profile-form input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--blue);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.profile-form input[type="file"]::file-selector-button:hover {
+  background: #83baff;
+}
+
+.profile-form small {
+  display: block;
+  margin: 7px 2px 0;
+  color: #5c5f6c;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 480px) {
+  .profile-form {
+    max-width: 100%;
+  }
+}
+
+.form.inline {
+  display: flex;
+  gap: 10px;
+  max-width: none;
+}
+
+.form.inline input {
+  margin: 0;
+  min-width: 0;
+}
+
+.form.inline .button {
+  margin: 0;
+}
+
+.localsearch {
+  margin-left: 12px;
+  width: 200px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f7f7f9;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.inline-action {
+  display: inline-flex;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.page > .sub .inline-action {
+  display: inline-flex;
+}
+
+.create {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Feedback & State Notices */
+.notice {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.notice.error {
+  background: #f5c6c0;
+  color: #7f1d1d;
+}
+
+.notice.success {
+  background: #cfeedd;
+  color: #1e5d32;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+.empty {
+  padding: 30px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+/* Modals & Menus */
+.modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 37, 64, 0.45);
+}
+
+.modal {
+  width: min(420px, 92%);
+  padding: 22px;
+  background: #fff;
+  border-radius: 14px;
+}
+
+.modal h3 {
+  margin: 0 0 8px;
+}
+
+.modal p {
+  font-size: 0.82rem;
+}
+
+.modal .row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.wrap {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  min-width: 210px;
+  padding: 8px 16px;
+  background: #dcdbe0;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 0 6px 14px rgba(31, 37, 64, 0.25);
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--ink);
+}
+
+.menu button:hover {
+  text-decoration: underline;
+}
+
+.menu hr {
+  margin: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.star,
+.more {
+  background: none;
+  border: 0;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+/* General Row Items */
+.row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e3e3e8;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--ink) !important;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.row-item:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.row-item.unread {
+  font-weight: 600;
+}
+
+.row-item small {
+  white-space: nowrap;
+}
+
+/* Row Action Buttons Container */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin: 0;
+}
+
+/* Modern Action Buttons */
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+/* Approve Button */
+.btn-action.approve,
+.btn-approve {
+  background: #e6f7ee;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.btn-action.approve:hover,
+.btn-approve:hover {
+  background: #15803d;
+  color: #ffffff;
+  border-color: #15803d;
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Remove Button */
+.btn-action.remove,
+.btn-remove {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.btn-action.remove:hover,
+.btn-remove:hover {
+  background: #b91c1c;
+  color: #ffffff;
+  border-color: #b91c1c;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Neutral / Secondary Button */
+.btn-action.secondary,
+.btn-secondary {
+  background: #ffffff;
+  color: var(--ink);
+  border-color: #d1d5db;
+}
+
+.btn-action.secondary:hover,
+.btn-secondary:hover {
+  background: #f3f4f6;
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 800px) {
+  .create {
+    display: none;
+  }
+  .form.inline {
+    flex-wrap: wrap;
+  }
+  .form.inline input {
+    flex: 1 1 140px;
+  }
+}

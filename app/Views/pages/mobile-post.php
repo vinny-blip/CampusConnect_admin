@@ -8,10 +8,10 @@
     <p class="sub"><?= h($mobilePost['category']) ?> · <?= h($mobilePost['username']) ?> · <?= h($mobilePost['moderation_status']) ?></p>
     <p><?= nl2br(h($mobilePost['content'])) ?></p>
     <?php if ((int)$mobilePost['report_count']): ?><p class="sub">Reports: <?= (int)$mobilePost['report_count'] ?><?= $mobilePost['report_reason'] ? ' · ' . h($mobilePost['report_reason']) : '' ?></p><?php endif; ?>
-    <form method="post" onsubmit="return confirm('Remove this post from the mobile app?')"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$mobilePost['id'] ?>"><button name="action" value="mobile-approve">Approve</button> <button name="action" value="mobile-remove">Remove</button> <button name="action" value="mobile-pending">Reset to pending</button></form>
+    <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$mobilePost['id'] ?>"><button class="btn-action approve" name="action" value="mobile-approve">Approve</button> <button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove</button></form>
   </article>
   <h3>Comments (<?= count($mobilePost['comments']) ?>)</h3>
   <?php foreach ($mobilePost['comments'] as $comment): ?>
-    <div class="row-item"><span><b><?= h($comment['username']) ?></b> · <?= h($comment['moderation_status']) ?><br><?= h($comment['content']) ?></span><form method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button name="action" value="mobile-<?= $comment['moderation_status'] === 'hidden' ? 'restore-comment' : 'hide-comment' ?>"><?= $comment['moderation_status'] === 'hidden' ? 'Restore' : 'Hide' ?></button></form></div>
+    <div class="row-item"><span><b><?= h($comment['username']) ?></b><br><?= h($comment['content']) ?></span><form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Delete this comment from the mobile app?')">Delete</button></form></div>
   <?php endforeach; ?>
 <?php endif; ?>

@@ -6,4 +6,5 @@ RewriteRule ^(?:\.git|\.env|composer\.(?:json|lock)|config/database\.local\.php)
 RewriteRule ^public/ - [F,L,NC]
 RewriteRule ^$ public/index.php [END]
 RewriteRule ^assets/(.*)$ public/assets/$1 [END]
+RewriteRule ^uploads/(.*)$ public/uploads/$1 [END]
 RewriteRule ^(.+)$ public/index.php?_cc_route=$1 [END,QSA]

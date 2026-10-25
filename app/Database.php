@@ -37,7 +37,14 @@ final class Database
             if ((int)$roleColumn === 0) {
                 $mysql->exec("ALTER TABLE admin_users ADD COLUMN role ENUM('admin', 'moderator') NOT NULL DEFAULT 'moderator'");
             }
-            $mysql->query('SELECT id, name, email, password_hash, role FROM admin_users LIMIT 0');
+            $profileImageColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_users' AND COLUMN_NAME = 'profile_image'"
+            )->fetchColumn();
+            if ((int)$profileImageColumn === 0) {
+                $mysql->exec('ALTER TABLE admin_users ADD COLUMN profile_image VARCHAR(255) NULL AFTER role');
+            }
+            $mysql->query('SELECT id, name, email, password_hash, role, profile_image FROM admin_users LIMIT 0');
             $mysql->query('SELECT user_id, state_key, state_data FROM admin_app_state LIMIT 0');
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_system_migrations (
@@ -104,6 +111,26 @@ final class Database
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     INDEX admin_mobile_post_status (status),
                     INDEX admin_mobile_post_reports (report_count)
+                ) ENGINE=InnoDB'
+            );
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS admin_removed_mobile_posts (
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    mobile_post_id INT NOT NULL,
+                    mobile_user_id INT NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT NULL,
+                    category VARCHAR(255) NULL,
+                    author_name VARCHAR(255) NULL,
+                    author_username VARCHAR(255) NULL,
+                    ai_flagged TINYINT(1) NOT NULL DEFAULT 0,
+                    ai_categories VARCHAR(1000) NULL,
+                    reason VARCHAR(500) NULL,
+                    removed_by BIGINT UNSIGNED NULL,
+                    removed_by_name VARCHAR(120) NULL,
+                    post_created_at TIMESTAMP NULL,
+                    removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX admin_removed_post_removed_at (removed_at)
                 ) ENGINE=InnoDB'
             );
             $mysql->exec(

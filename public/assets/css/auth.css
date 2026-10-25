@@ -1,0 +1,109 @@
+/* ==========================================================================
+   Authentication Pages (Login & Register)
+   ========================================================================== */
+
+.auth {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(360px, 100%);
+  background: var(--card);
+  border-radius: 28px;
+  padding: 32px 28px;
+  box-shadow: 6px 8px 0 rgba(31, 37, 64, 0.25);
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  text-align: center;
+}
+
+.logo {
+  display: block;
+  width: 190px;
+  max-width: 80%;
+  margin: 0 auto 6px;
+}
+
+.tagline {
+  text-align: center;
+  font-size: 0.8rem;
+  margin: 4px 0 20px;
+}
+
+.auth label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-top: 12px;
+}
+
+.auth input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #d6d6d6;
+  font: inherit;
+}
+
+.auth input.field-error {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.2);
+}
+
+.msg {
+  min-height: 1.2em;
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--red);
+}
+
+.msg.shake {
+  animation: auth-error-shake 0.35s ease;
+}
+
+@keyframes auth-error-shake {
+  25% { transform: translateX(-6px); }
+  50% { transform: translateX(6px); }
+  75% { transform: translateX(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg.shake {
+    animation: none;
+  }
+}
+
+.auth .btn {
+  display: block;
+  margin: 20px auto 0;
+  padding: 8px 28px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: #e9e9e9;
+  font-weight: 600;
+}
+
+.auth .btn:hover {
+  background: #fff;
+}
+
+.alt {
+  text-align: center;
+  font-size: 0.8rem;
+  margin: 14px 0 0;
+}
+
+.alt a {
+  color: var(--ink);
+  font-weight: 600;
+}
+

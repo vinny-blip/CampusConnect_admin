@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   email VARCHAR(254) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin', 'moderator') NOT NULL DEFAULT 'moderator',
+  profile_image VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY admin_users_email_unique (email)
@@ -61,6 +62,27 @@ CREATE TABLE IF NOT EXISTS admin_mobile_post_moderation (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX admin_mobile_post_status (status),
   INDEX admin_mobile_post_reports (report_count)
+) ENGINE=InnoDB;
+
+-- Snapshot of mobile posts removed from the dashboard, because the post
+-- itself is deleted from the shared mobile_posts table.
+CREATE TABLE IF NOT EXISTS admin_removed_mobile_posts (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  mobile_post_id INT NOT NULL,
+  mobile_user_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NULL,
+  category VARCHAR(255) NULL,
+  author_name VARCHAR(255) NULL,
+  author_username VARCHAR(255) NULL,
+  ai_flagged TINYINT(1) NOT NULL DEFAULT 0,
+  ai_categories VARCHAR(1000) NULL,
+  reason VARCHAR(500) NULL,
+  removed_by BIGINT UNSIGNED NULL,
+  removed_by_name VARCHAR(120) NULL,
+  post_created_at TIMESTAMP NULL,
+  removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX admin_removed_post_removed_at (removed_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS admin_mobile_comment_moderation (

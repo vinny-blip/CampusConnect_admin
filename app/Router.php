@@ -6,9 +6,9 @@ final class Router
     private const ROUTES = [
         'index', 'login', 'register', 'home', 'control', 'queues',
         'about', 'faqs', 'post', 'overview', 'posts',
-        'comments', 'restricted', 'reported',
+        'comments', 'restricted', 'reported', 'removed', 'users',
         'notifications', 'profile', 'search',
-        'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments', 'mobile-users',
+        'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
     ];
 
     public static function dispatch(?string $requestedRoute = null): void

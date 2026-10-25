@@ -70,7 +70,7 @@
             <?php if ($comment['hidden']): ?>
               <?php if ($comment['aiNeedsReview']): ?>
                 <p class="flag"><?= $comment['aiReviewError'] ? 'AI check unavailable; held for admin review' : 'AI flagged for admin review' ?><?= $comment['aiCategories'] ? ': ' . h(implode(', ', $comment['aiCategories'])) : '' ?></p>
-                <a href="queues.php?tab=ai">Review AI-held comments</a>
+                <a href="comments.php">Review AI-held comments</a>
               <?php else: ?>
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="restore-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Restore comment</button></form>
               <?php endif; ?>

@@ -1,8 +1,11 @@
 <?php
 $reportChartCompact = $reportChartCompact ?? false;
+$reportRange = (int)($reportRange ?? count($reportCountsByDate));
+$reportRangeLabel = $reportRange === 365 ? 'past year' : 'past ' . $reportRange . ' days';
 $reportDays = count($reportCountsByDate);
 $reportTotal = array_sum(array_column($reportCountsByDate, 'count'));
-$reportMax = max(1, max(array_column($reportCountsByDate, 'count')));
+$reportDataMax = max(0, max(array_column($reportCountsByDate, 'count')));
+$reportMax = max(4, (int)(ceil($reportDataMax / 4) * 4));
 $chartWidth = $reportChartCompact ? 360 : 840;
 $chartHeight = $reportChartCompact ? 210 : 250;
 $chartLeft = $reportChartCompact ? 34 : 48;
@@ -16,14 +19,23 @@ $barWidth = $chartStep * .56;
   <div class="report-chart-heading">
     <div>
       <h3 id="report-chart-title">Reported content by date</h3>
-      <p>Post and comment reports submitted in the past <?= (int)$reportDays ?> days.</p>
+      <p>Post and comment reports submitted in the <?= h($reportRangeLabel) ?>.</p>
     </div>
-    <b><?= (int)$reportTotal ?> reports</b>
+    <div class="report-chart-controls">
+      <label for="report-range">Range</label>
+      <select id="report-range" name="report_range" onchange="this.form.submit()" aria-label="Report chart range" form="report-range-form">
+        <option value="7"<?= $reportRange === 7 ? ' selected' : '' ?>>7 days</option>
+        <option value="30"<?= $reportRange === 30 ? ' selected' : '' ?>>30 days</option>
+        <option value="365"<?= $reportRange === 365 ? ' selected' : '' ?>>1 year</option>
+      </select>
+      <b><?= (int)$reportTotal ?> reports</b>
+    </div>
   </div>
+  <form id="report-range-form" class="report-range-form" method="get"></form>
   <?php if (!$reportChartCompact): ?><p class="report-chart-note">Dismissed or deleted reports remain in these totals. Older reports are not included because their original report dates were not recorded.</p><?php endif; ?>
   <div class="report-chart-scroll">
     <svg class="report-chart" viewBox="0 0 <?= $chartWidth ?> <?= $chartHeight ?>" role="img" aria-labelledby="report-chart-title report-chart-description">
-      <desc id="report-chart-description">Bar chart showing <?= (int)$reportTotal ?> reports across the past <?= (int)$reportDays ?> days.</desc>
+      <desc id="report-chart-description">Bar chart showing <?= (int)$reportTotal ?> reports across the <?= h($reportRangeLabel) ?>.</desc>
       <?php for ($line = 0; $line <= 4; $line++): ?>
         <?php
         $gridY = $chartTop + ($chartPlotHeight / 4) * $line;
@@ -42,7 +54,10 @@ $barWidth = $chartStep * .56;
           <title><?= h($day['date']) ?>: <?= (int)$day['count'] ?> reports</title>
         </rect>
         <?php if ($day['count'] > 0): ?><text x="<?= round($barX + $barWidth / 2, 1) ?>" y="<?= max($barY - 6, 12) ?>" class="chart-value" text-anchor="middle"><?= (int)$day['count'] ?></text><?php endif; ?>
-        <?php if ($index % 2 === 0 || $index === $reportDays - 1): ?>
+        <?php
+        $labelInterval = $reportRange === 365 ? 1 : ($reportRange === 30 ? 5 : 2);
+        ?>
+        <?php if ($index % $labelInterval === 0 || $index === $reportDays - 1): ?>
           <text x="<?= round($barX + $barWidth / 2, 1) ?>" y="<?= $chartTop + $chartPlotHeight + 22 ?>" class="chart-axis" text-anchor="middle"><?= h($day['label']) ?></text>
         <?php endif; ?>
       <?php endforeach; ?>

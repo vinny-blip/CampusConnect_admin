@@ -27,7 +27,7 @@ final class MobileModerationModel
     public function counts(): array
     {
         if (!$this->available()) {
-            return ['posts' => 0, 'comments' => 0, 'users' => 0, 'reported' => 0, 'pending' => 0, 'approved' => 0, 'removed' => 0];
+            return ['posts' => 0, 'comments' => 0, 'users' => 0, 'reported' => 0, 'pending' => 0, 'flagged' => 0, 'approved' => 0, 'removed' => 0];
         }
         return [
             'posts' => (int)$this->db->query('SELECT COUNT(*) FROM mobile_posts')->fetchColumn(),
@@ -39,6 +39,11 @@ final class MobileModerationModel
             'pending' => (int)$this->db->query(
                 "SELECT COUNT(*) FROM mobile_posts p LEFT JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
                  WHERE COALESCE(m.status, 'pending') = 'pending'"
+            )->fetchColumn(),
+            'flagged' => (int)$this->db->query(
+                "SELECT COUNT(*) FROM mobile_posts p
+                 JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
+                 WHERE m.ai_flagged = 1"
             )->fetchColumn(),
             'approved' => (int)$this->db->query(
                 "SELECT COUNT(*) FROM mobile_posts p LEFT JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
@@ -53,9 +58,40 @@ final class MobileModerationModel
 
     public function reportCountsByDate(int $days = 14): array
     {
-        $days = max(1, min(90, $days));
+        $days = max(1, min(365, $days));
         $results = [];
         $today = new DateTimeImmutable('today');
+        $monthly = $days > 90;
+        if ($monthly) {
+            $firstMonth = $today->modify('first day of this month')->modify('-11 months');
+            $monthCount = 12;
+            if (!$this->available()) {
+                for ($offset = 0; $offset < $monthCount; $offset++) {
+                    $month = $firstMonth->modify("+{$offset} months");
+                    $results[] = ['date' => $month->format('Y-m-01'), 'label' => $month->format('M'), 'count' => 0];
+                }
+                return $results;
+            }
+
+            $statement = $this->db->prepare(
+                "SELECT DATE_FORMAT(created_at, '%Y-%m-01') AS report_month, COUNT(*) AS report_count
+                 FROM mobile_reports
+                 WHERE created_at >= ?
+                 GROUP BY DATE_FORMAT(created_at, '%Y-%m-01')"
+            );
+            $statement->execute([$firstMonth->format('Y-m-d 00:00:00')]);
+            $counts = [];
+            foreach ($statement->fetchAll() as $row) {
+                $counts[$row['report_month']] = (int)$row['report_count'];
+            }
+            for ($offset = 0; $offset < $monthCount; $offset++) {
+                $month = $firstMonth->modify("+{$offset} months");
+                $key = $month->format('Y-m-01');
+                $results[] = ['date' => $key, 'label' => $month->format('M'), 'count' => $counts[$key] ?? 0];
+            }
+            return $results;
+        }
+
         if (!$this->available()) {
             for ($offset = $days - 1; $offset >= 0; $offset--) {
                 $date = $today->modify("-{$offset} days");
@@ -117,6 +153,21 @@ final class MobileModerationModel
         $statement = $this->db->prepare($sql);
         $statement->execute($params);
         return $this->reconcileObviousProfanity($statement->fetchAll());
+    }
+
+    public function recentlyAiFlaggedPosts(): array
+    {
+        $statement = $this->db->query(
+            "SELECT p.id, p.title, p.category AS college, u.full_name, m.ai_categories
+             FROM admin_mobile_post_moderation m
+             JOIN mobile_posts p ON p.id = m.mobile_post_id
+             JOIN mobile_users u ON u.id = p.user_id
+             WHERE m.ai_flagged = 1
+               AND m.created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY)
+             ORDER BY m.created_at DESC
+             LIMIT 200"
+        );
+        return $statement->fetchAll();
     }
 
     public function post(int $id): ?array
@@ -288,10 +339,32 @@ final class MobileModerationModel
         return $statement->rowCount() > 0;
     }
 
+    public function removedPosts(string $query = ''): array
+    {
+        $sql = 'SELECT * FROM admin_removed_mobile_posts';
+        $params = [];
+        if ($query !== '') {
+            $sql .= ' WHERE title LIKE ? OR content LIKE ? OR category LIKE ? OR author_username LIKE ? OR author_name LIKE ?';
+            $like = '%' . $query . '%';
+            $params = [$like, $like, $like, $like, $like];
+        }
+        $statement = $this->db->prepare($sql . ' ORDER BY removed_at DESC, id DESC LIMIT 200');
+        $statement->execute($params);
+        return $statement->fetchAll();
+    }
+
     public function removePost(int $id, string $reason = 'Violating community guidelines'): bool
     {
-        $statement = $this->db->prepare('SELECT user_id, title FROM mobile_posts WHERE id = ?');
-        $statement->execute([$id]);
+        $statement = $this->db->prepare(
+            'SELECT p.user_id, p.title, p.content, p.category, p.created_at,
+                    u.full_name, u.username, m.ai_flagged, m.ai_categories,
+                    (SELECT name FROM admin_users WHERE id = ?) AS admin_name
+             FROM mobile_posts p
+             LEFT JOIN mobile_users u ON u.id = p.user_id
+             LEFT JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
+             WHERE p.id = ?'
+        );
+        $statement->execute([$this->adminId, $id]);
         $post = $statement->fetch();
         if (!$post) {
             return false;
@@ -299,6 +372,27 @@ final class MobileModerationModel
 
         $this->db->beginTransaction();
         try {
+            $archive = $this->db->prepare(
+                'INSERT INTO admin_removed_mobile_posts
+                    (mobile_post_id, mobile_user_id, title, content, category, author_name, author_username,
+                     ai_flagged, ai_categories, reason, removed_by, removed_by_name, post_created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            $archive->execute([
+                $id,
+                (int)$post['user_id'],
+                (string)$post['title'],
+                $post['content'],
+                $post['category'],
+                $post['full_name'],
+                $post['username'],
+                (int)($post['ai_flagged'] ?? 0),
+                $post['ai_categories'],
+                $reason,
+                $this->adminId,
+                $post['admin_name'],
+                $post['created_at'],
+            ]);
             $notification = $this->db->prepare(
                 "INSERT INTO mobile_notifications (user_id, type, title, message, post_id)
                  VALUES (?, 'moderation', ?, ?, ?)"
@@ -311,6 +405,53 @@ final class MobileModerationModel
             ]);
             $delete = $this->db->prepare('DELETE FROM mobile_posts WHERE id = ? AND user_id = ?');
             $delete->execute([$id, (int)$post['user_id']]);
+            $this->db->commit();
+            return $delete->rowCount() > 0;
+        } catch (Throwable $exception) {
+            $this->db->rollBack();
+            throw $exception;
+        }
+    }
+
+    public function removeComment(int $id, string $reason = 'Violating community guidelines'): bool
+    {
+        $statement = $this->db->prepare(
+            'SELECT c.id, c.user_id, c.post_id, c.content, p.title AS post_title
+             FROM mobile_comments c
+             LEFT JOIN mobile_posts p ON p.id = c.post_id
+             WHERE c.id = ?'
+        );
+        $statement->execute([$id]);
+        $comment = $statement->fetch();
+        if (!$comment) {
+            return false;
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $snippet = trim((string)$comment['content']);
+            if (mb_strlen($snippet) > 60) {
+                $snippet = mb_substr($snippet, 0, 57) . '...';
+            }
+            $postContext = !empty($comment['post_title']) ? ' on "' . (string)$comment['post_title'] . '"' : '';
+            $message = 'Your comment' . $postContext . ' ("' . $snippet . '") was removed for violating community guidelines.';
+
+            $notification = $this->db->prepare(
+                "INSERT INTO mobile_notifications (user_id, type, title, message, post_id)
+                 VALUES (?, 'moderation', ?, ?, ?)"
+            );
+            $notification->execute([
+                (int)$comment['user_id'],
+                'Comment removed',
+                $message,
+                (int)($comment['post_id'] ?? 0),
+            ]);
+
+            $this->db->prepare('DELETE FROM admin_mobile_comment_moderation WHERE mobile_comment_id = ?')->execute([$id]);
+
+            $delete = $this->db->prepare('DELETE FROM mobile_comments WHERE id = ?');
+            $delete->execute([$id]);
+
             $this->db->commit();
             return $delete->rowCount() > 0;
         } catch (Throwable $exception) {

@@ -4,9 +4,9 @@ $showStatus = in_array($mode, ['posts', 'control'], true);
 <h2><?= h($feedTitle) ?></h2>
 <?php if ($feedSub !== ''): ?>
   <?php if ($mode === 'control'): ?>
-    <p class="sub">Pin or remove posts in the feed. Pending posts have to be checked in the <a href="queues.php">queue</a> first.</p>
+    <p class="sub">Manage posts in the feed, including pending posts awaiting review.</p>
   <?php elseif ($mode === 'reported'): ?>
-    <p class="sub">Posts that members reported. Review pending ones in the <a href="queues.php?tab=reported">reported queue</a>.</p>
+    <p class="sub">Posts that members reported. Review pending reports here.</p>
   <?php else: ?>
     <p class="sub"><?= h($feedSub) ?></p>
   <?php endif; ?>

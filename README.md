@@ -52,9 +52,16 @@ verify that `public_html/.htaccess` exists.
 MySQL must be available for login and dashboard access. Passwords are hashed.
 Set `admin_users.role` to `admin` for each administrator; new registrations
 default to `moderator`.
+The Profile page supports changing the display name, uploading a JPG, PNG, or
+WebP profile picture (up to 5 MB), and changing the password after verifying
+the current password. The app adds `admin_users.profile_image` automatically
+to existing databases; uploaded images are stored under `public/uploads/profile/`.
 Only administrators can open the Restricted page. The admin dashboard tables
 are prefixed with `admin_` so they remain distinct from the mobile
 application's `mobile_` tables.
+Moderators receive an in-app notification for each AI-flagged mobile post
+recorded in the last 30 days. The header bell displays the unread count and
+checks for new notifications every 30 seconds while the dashboard is open.
 
 The Mobile data pages read the shared `mobile_users`, `mobile_posts`, and
 `mobile_comments` tables directly. Admin-owned moderation state is stored in
@@ -70,16 +77,17 @@ the same Hostinger database for those pages to display data.
 | Login / Register | `login.php`, `register.php` |
 | Home | `home.php` |
 | Control Posts/Feed | `control.php` |
-| Queues | `queues.php` (`dashboard.php` forwards here) |
+| Queues | Removed; `queues.php` redirects to `control.php` for backwards compatibility |
 | About Us | `about.php` |
 | FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
 | Overview, Posts, Comments, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `restricted.php`, `reported.php` |
 | Notifications, Profile, Search | `notifications.php`, `profile.php`, `search.php` |
-| Home, Posts, Queues, Reported, Comments | `home.php`, `posts.php`, `queues.php`, `reported.php`, `comments.php` |
+| Home, Posts, Reported, Comments | `home.php`, `posts.php`, `reported.php`, `comments.php` |
 
-The existing Home, Posts, Control Posts/Feed, Queues, Reported, and Comments
-pages display the shared mobile application data directly. The separate
+The existing Home, Posts, Control Posts/Feed, Reported, and Comments
+pages display the shared mobile application data directly. The removed Queues
+route redirects to Control Posts/Feed. The separate
 `mobile-*.php` routes remain available as compatibility entry points, but are
 not part of the main navigation.
 

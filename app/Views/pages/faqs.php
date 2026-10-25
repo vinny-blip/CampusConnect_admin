@@ -16,13 +16,13 @@
     </details>
     <details class="faq-item">
       <summary>What is this dashboard for?</summary>
-      <p>This web dashboard is for moderators to review reported content, manage moderation queues, and help keep community discussions organized and respectful.</p>
+      <p>This web dashboard is for moderators to review pending and reported content, and help keep community discussions organized and respectful.</p>
     </details>
     <details class="faq-item">
     </details>
     <details class="faq-item">
       <summary>What happens when a post is reported?</summary>
-      <p>Reported posts are available in the <a href="queues.php?tab=reported">reported queue</a> for moderator review. Open a post to read its details before deciding what action to take.</p>
+      <p>Reported posts are available on the <a href="reported.php">Reported</a> page for moderator review. Open a post to read its details before deciding what action to take.</p>
     </details>
     <details class="faq-item">
       <summary>How can I contact the moderation team?</summary>

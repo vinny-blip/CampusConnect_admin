@@ -4,8 +4,9 @@ switch ($page):
     case 'posts':
     case 'control':
     case 'reported':
-    case 'queues':
+    case 'removed':
     case 'comments':
+    case 'users':
         require __DIR__ . '/pages/mobile-list.php';
         break;
     case 'search':
@@ -36,7 +37,6 @@ switch ($page):
     case 'mobile-queues':
     case 'mobile-reports':
     case 'mobile-comments':
-    case 'mobile-users':
         require __DIR__ . '/pages/mobile-list.php';
         break;
     case 'mobile-post':
