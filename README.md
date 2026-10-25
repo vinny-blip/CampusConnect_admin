@@ -19,12 +19,15 @@ configuration files.
    [`config/database.sql`](./config/database.sql). If Hostinger rejects the
    `CREATE DATABASE` or `USE` statements, remove those two statements and
    import the remaining schema into the database selected in phpMyAdmin.
-3. Configure the database password through the `CC_DB_PASSWORD` server
-   environment variable. If the domain does not provide a server environment
-   setting, set the password directly in the server-only
-   `config/database.php` as `'db_password' => 'your-password'`; do not commit
-   that value. The remaining Hostinger connection values are in that file.
-   Rotate any password that was exposed while configuring deployment.
+3. Configure `CC_DB_HOST`, `CC_DB_PORT`, `CC_DB_NAME`, `CC_DB_USER`, and
+   `CC_DB_PASSWORD` as server environment variables. If Hostinger does not pass
+   those variables to PHP, create `.env` beside the project's root `.htaccess`
+   and `config/` folder using `.env.example` as the template. The private `.env`
+   file is ignored by Git and blocked from web access, so it must be uploaded
+   separately when deploying from Git. Never put real credentials in
+   `config/database.php` or commit `.env`. PHP environment values take
+   precedence over `.env`. Rotate any database password that was previously
+   exposed while configuring deployment.
 4. Set the domain's PHP version to a supported PHP 8.x release and ensure PDO
    MySQL, fileinfo, and GD/image support are enabled. PDO SQLite is not used
    by this application.
@@ -39,15 +42,22 @@ configuration files.
    ```
 
    This file is excluded from Git and the `config/` directory is blocked from
-   web access by `.htaccess`. Never put the real key in Git, JavaScript, or a
-   public file.
+   web access by `.htaccess`. The mobile backend can read this same file when
+   it is deployed beside the dashboard in the expected folder structure; if
+   the mobile backend is deployed separately, create the same server-only
+   file at `backend_setup/config/openai.local.php`. Never put the real key in
+   Git, JavaScript, or a public file.
 6. Visit the domain and register accounts before using the dashboard. Set the
    `role` column to `admin` in phpMyAdmin for each administrator account.
 
-For Hostinger Git deployment, deploy the repository into `public_html` and
-ensure `config/database.php` is present after each fresh deployment. For File
-Manager deployment, upload a ZIP, extract it directly into `public_html`, and
-verify that `public_html/.htaccess` exists.
+For Hostinger Git deployment, configure the database environment variables in
+the hosting environment or separately upload `.env` beside `.htaccess` and
+`config/` (for an `/admin` install, this is typically
+`public_html/admin/.env`). Since `.env` is ignored by Git, it is not included in
+Git deployments. For File Manager deployment, upload the private `.env` file
+alongside `.htaccess`; do not include it in a public download or commit it to
+Git. Verify that the `.env` file and `public_html/.htaccess` are in the project
+root.
 
 MySQL must be available for login and dashboard access. Passwords are hashed.
 Set `admin_users.role` to `admin` for each administrator; new registrations
@@ -76,7 +86,7 @@ the same Hostinger database for those pages to display data.
 |---|---|
 | Login / Register | `login.php`, `register.php` |
 | Home | `home.php` |
-| Control Posts/Feed | `control.php` |
+| Control Feed | `control.php` |
 | Queues | Removed; `queues.php` redirects to `control.php` for backwards compatibility |
 | About Us | `about.php` |
 | FAQs | `faqs.php` |
@@ -84,10 +94,21 @@ the same Hostinger database for those pages to display data.
 | Overview, Posts, Comments, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `restricted.php`, `reported.php` |
 | Notifications, Profile, Search | `notifications.php`, `profile.php`, `search.php` |
 | Home, Posts, Reported, Comments | `home.php`, `posts.php`, `reported.php`, `comments.php` |
+| Mobile app login session history | `logs.php` |
 
-The existing Home, Posts, Control Posts/Feed, Reported, and Comments
+Mobile app login logs record successful mobile-app sign-ins and explicit
+sign-outs. The active-user count uses a five-minute activity window refreshed
+by a heartbeat while the mobile app is in the foreground. App closures and
+connection losses cannot send a reliable logout event, so those logout times
+are estimated. To capture sessions, deploy the updated mobile `login.php`,
+`mobile_session_heartbeat.php`, and `mobile_session_logout.php` backend files,
+then build and distribute the updated Android app. The dashboard creates the
+shared session-log table automatically; importing `CampusConnect/backend_setup/campusconnect_db.sql`
+also includes its schema.
+
+The existing Home, Posts, Control Feed, Reported, and Comments
 pages display the shared mobile application data directly. The removed Queues
-route redirects to Control Posts/Feed. The separate
+route redirects to Control Feed. The separate
 `mobile-*.php` routes remain available as compatibility entry points, but are
 not part of the main navigation.
 
@@ -99,6 +120,13 @@ web admin reads those report records directly and displays pending reports in
 reason, optional comments, status, and timestamp. A moderator can dismiss a
 pending report from the web page; this updates that report's `status` without
 deleting the mobile post.
+
+Suspending a mobile user requires a lift date and time in the moderator's local
+time zone. New deadlines are stored in UTC to avoid differences between the
+browser, PHP, and MySQL server clocks. The Users page checks every 15 seconds
+and automatically restores expired suspensions; reopening the page also
+performs the check. The moderator can still use **Restore** to end a suspension
+early.
 
 When AI Moderation is enabled in **Queues**, the mobile API submission
 endpoints call OpenAI Moderation for new post titles/content and comments.
@@ -136,8 +164,10 @@ app/
 
   helpers.php         Shared view helpers
 config/
-  database.php        Database settings
+  database.php        Loads database settings from the environment
   database.sql        Schema
+.env.example          Template for local database settings
+.env                  Private local database settings (not committed)
 public/
   assets/             CSS and images
   *.php               Page entry points

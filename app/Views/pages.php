@@ -1,4 +1,5 @@
 <?php
+// Selects the page template that matches the route handled by the controller.
 switch ($page):
     case 'home':
     case 'posts':
@@ -8,6 +9,12 @@ switch ($page):
     case 'comments':
     case 'users':
         require __DIR__ . '/pages/mobile-list.php';
+        break;
+    case 'logs':
+        require __DIR__ . '/pages/logs.php';
+        break;
+    case 'user':
+        require __DIR__ . '/pages/user-activity.php';
         break;
     case 'search':
         require __DIR__ . '/pages/feed.php';

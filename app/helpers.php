@@ -1,11 +1,13 @@
 <?php
 declare(strict_types=1);
 
+/** Escapes a value before it is printed into HTML. */
 function h(mixed $value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** Formats a millisecond timestamp as a short relative age. */
 function ago(int $timestamp): string
 {
     $minutes = max(1, (int)round(((int)(microtime(true) * 1000) - $timestamp) / 60000));
@@ -18,16 +20,19 @@ function ago(int $timestamp): string
     return (int)floor($minutes / 1440) . 'd';
 }
 
+/** Formats a millisecond timestamp as a calendar date. */
 function date_label(int $timestamp): string
 {
     return date('M j, Y', intdiv($timestamp, 1000));
 }
 
+/** Formats a millisecond timestamp as a date and time. */
 function date_time_label(int $timestamp): string
 {
     return date('M j, Y g:i A', intdiv($timestamp, 1000));
 }
 
+/** Builds up to two initials from a person's name. */
 function initials(string $name): string
 {
     $words = preg_split('/\s+/', trim($name)) ?: [];
@@ -38,6 +43,7 @@ function initials(string $name): string
     return mb_strtoupper(mb_substr($letters, 0, 2));
 }
 
+/** Returns the SVG markup for a named dashboard icon. */
 function icon_svg(string $name): string
 {
     $paths = [
@@ -46,6 +52,7 @@ function icon_svg(string $name): string
         'sliders' => '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M2 14h4M10 8h4M18 16h4"/>',
         'mail' => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
         'users' => '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        'history' => '<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
         'info' => '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
         'help' => '<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.2 1.8c-1.1 1-1.8 1.3-1.8 2.7M12 17h.01"/>',
         'message' => '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/>',
@@ -68,6 +75,7 @@ function icon_svg(string $name): string
     return '<svg class="web-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $paths[$name] . '</svg>';
 }
 
+/** Lists the standard reasons used when reporting content. */
 function report_reason_options(): array
 {
     return [
@@ -78,6 +86,7 @@ function report_reason_options(): array
     ];
 }
 
+/** Displays a one-time success or error message. */
 function flash_message(?array $flash): void
 {
     if ($flash === null) {
@@ -87,6 +96,7 @@ function flash_message(?array $flash): void
     echo '<p class="notice ' . $type . '" role="status">' . h($flash['message'] ?? '') . '</p>';
 }
 
+/** Prints a protected form button for a post action. */
 function post_action(string $csrf, string $action, int $postId, string $label, string $class = 'chip', bool $disabled = false, ?string $icon = null): void
 {
     echo '<form class="inline-action" method="post">' . $csrf . '<input type="hidden" name="action" value="' . h($action)

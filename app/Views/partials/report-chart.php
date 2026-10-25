@@ -1,7 +1,7 @@
 <?php
 $reportChartCompact = $reportChartCompact ?? false;
 $reportRange = (int)($reportRange ?? count($reportCountsByDate));
-$reportRangeLabel = $reportRange === 365 ? 'past year' : 'past ' . $reportRange . ' days';
+$reportRangeLabel = $reportRange === 365 ? 'this calendar year' : 'past ' . $reportRange . ' days';
 $reportDays = count($reportCountsByDate);
 $reportTotal = array_sum(array_column($reportCountsByDate, 'count'));
 $reportDataMax = max(0, max(array_column($reportCountsByDate, 'count')));

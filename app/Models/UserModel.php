@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 final class UserModel
 {
+    /** Shares the database connection used for administrator accounts. */
     public function __construct(private PDO $db)
     {
     }
 
+    /** Looks up a dashboard account by its numeric ID. */
     public function findById(int $id): ?array
     {
         $statement = $this->db->prepare('SELECT id, name, email, role, profile_image FROM admin_users WHERE id = ?');
@@ -15,6 +17,7 @@ final class UserModel
         return $user ? $this->withRole($user) : null;
     }
 
+    /** Looks up a dashboard account by email address. */
     public function findByEmail(string $email): ?array
     {
         $statement = $this->db->prepare('SELECT id, name, email, role FROM admin_users WHERE email = ?');
@@ -23,6 +26,7 @@ final class UserModel
         return $user ? $this->withRole($user) : null;
     }
 
+    /** Verifies a password and returns the matching dashboard account. */
     public function login(string $email, string $password): ?array
     {
         $statement = $this->db->prepare('SELECT id, name, email, password_hash FROM admin_users WHERE email = ?');
@@ -34,6 +38,7 @@ final class UserModel
         return $this->withRole($user);
     }
 
+    /** Validates and creates a moderator account from submitted form data. */
     public function register(array $data): array
     {
         $first = trim((string)($data['firstName'] ?? ''));
@@ -66,6 +71,7 @@ final class UserModel
         return [];
     }
 
+    /** Updates an account's display name. */
     public function updateName(int $id, string $name): bool
     {
         $name = trim($name);
@@ -77,12 +83,14 @@ final class UserModel
         return true;
     }
 
+    /** Saves the path of an account's profile image. */
     public function updateProfileImage(int $id, string $path): void
     {
         $statement = $this->db->prepare('UPDATE admin_users SET profile_image = ? WHERE id = ?');
         $statement->execute([$path, $id]);
     }
 
+    /** Verifies the current password before saving a replacement. */
     public function changePassword(int $id, string $currentPassword, string $newPassword): bool
     {
         $statement = $this->db->prepare('SELECT password_hash FROM admin_users WHERE id = ?');
@@ -97,6 +105,7 @@ final class UserModel
         return true;
     }
 
+    /** Normalizes account fields and removes the password hash from results. */
     private function withRole(array $user): array
     {
         $user['id'] = (int)$user['id'];

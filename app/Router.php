@@ -6,17 +6,19 @@ final class Router
     private const ROUTES = [
         'index', 'login', 'register', 'home', 'control', 'queues',
         'about', 'faqs', 'post', 'overview', 'posts',
-        'comments', 'restricted', 'reported', 'removed', 'users',
+        'comments', 'restricted', 'reported', 'removed', 'users', 'user', 'logs',
         'notifications', 'profile', 'search',
         'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
     ];
 
+    /** Resolves the requested route and starts its page controller. */
     public static function dispatch(?string $requestedRoute = null): void
     {
         $route = self::normalize($requestedRoute);
         (new PageController($route))->run();
     }
 
+    /** Cleans a requested page name and rejects routes not in the allowlist. */
     private static function normalize(?string $requestedRoute): string
     {
         $route = trim((string)$requestedRoute);

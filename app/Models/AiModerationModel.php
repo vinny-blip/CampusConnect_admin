@@ -3,21 +3,25 @@ declare(strict_types=1);
 
 final class AiModerationModel
 {
+    /** Shares the database connection for AI moderation settings. */
     public function __construct(private PDO $db)
     {
     }
 
+    /** Checks whether AI moderation is enabled in dashboard settings. */
     public function enabled(): bool
     {
         $enabled = $this->db->query('SELECT enabled FROM admin_ai_moderation_settings WHERE id = 1')->fetchColumn();
         return $enabled !== false && (bool)$enabled;
     }
 
+    /** Checks whether an OpenAI API key is available. */
     public function configured(): bool
     {
         return $this->apiKey() !== '';
     }
 
+    /** Saves whether AI moderation is enabled. */
     public function setEnabled(bool $enabled): void
     {
         $statement = $this->db->prepare(
@@ -27,6 +31,7 @@ final class AiModerationModel
         $statement->execute([$enabled ? 1 : 0]);
     }
 
+    /** Sends text and an optional image for moderation and returns its result. */
     public function inspect(string $text, string $image = ''): array
     {
         $apiKey = $this->apiKey();
@@ -87,22 +92,23 @@ final class AiModerationModel
         ];
     }
 
+    /** Finds the API key in the supported environment or local configuration. */
     private function apiKey(): string
     {
         $key = getenv('OPENAI_API_KEY');
-        if (is_string($key) && trim($key) !== '') {
+        if (is_string($key) && trim($key) !== '' && trim($key) !== 'PASTE_YOUR_OPENAI_API_KEY_HERE') {
             return trim($key);
         }
 
         $serverKey = $_SERVER['OPENAI_API_KEY'] ?? '';
-        if (is_string($serverKey) && trim($serverKey) !== '') {
+        if (is_string($serverKey) && trim($serverKey) !== '' && trim($serverKey) !== 'PASTE_YOUR_OPENAI_API_KEY_HERE') {
             return trim($serverKey);
         }
 
         $localConfig = dirname(__DIR__, 2) . '/config/openai.local.php';
         if (is_file($localConfig)) {
             $fileKey = require $localConfig;
-            if (is_string($fileKey) && trim($fileKey) !== '') {
+            if (is_string($fileKey) && trim($fileKey) !== '' && trim($fileKey) !== 'PASTE_YOUR_OPENAI_API_KEY_HERE') {
                 return trim($fileKey);
             }
         }

@@ -4,14 +4,21 @@ $isReports = in_array($page, ['reported', 'mobile-reports'], true);
 $isUsers = $page === 'users';
 $isRemoved = $page === 'removed';
 $isMobileStandalone = str_starts_with($page, 'mobile-');
-$heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? 'Comments' : ($isReports ? 'Reported' : ($page === 'home' ? 'Home' : 'Posts'))));
+$isRemovedPostsView = ($isRemoved && $mobileRemovedType === 'posts')
+  || ($isReports && $mobileReportView === 'removed-posts');
+$isRemovedCommentsView = ($isRemoved && $mobileRemovedType === 'comments')
+  || ($isReports && $mobileReportView === 'removed-comments');
+$isDismissedCommentsView = $isReports && $mobileReportView === 'dismissed-comments';
+$isReportArchiveView = $isReports && ($isRemovedPostsView || $isRemovedCommentsView || $isDismissedCommentsView);
+$heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal History' : ($isRemoved ? 'Removed' : ($isComments ? 'Comments' : ($isReports ? 'Reported' : ($page === 'home' ? 'Home' : 'Posts')))));
 ?>
-<?php if ($page === 'control'): ?><div class="moderation-page-header"><?php endif; ?>
+<?php $showAiToggle = in_array($page, ['control', 'posts', 'comments'], true); ?>
+<?php if ($showAiToggle): ?><div class="moderation-page-header"><?php endif; ?>
 <div class="page-heading">
   <h2><?= h($heading) ?></h2>
   <p class="sub"><?= $isMobileStandalone ? 'Shared Hostinger data from the CampusConnect mobile application.' : 'Content from the CampusConnect mobile application.' ?></p>
 </div>
-<?php if ($page === 'control'): ?>
+<?php if ($showAiToggle): ?>
   <form class="ai-moderation-form moderation-ai-toggle-form" method="post">
     <?= $csrf ?>
     <input type="hidden" name="action" value="toggle-ai-moderation">
@@ -28,11 +35,26 @@ $heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? '
 <?php if (!$mobileAvailable): ?>
   <p class="empty">The mobile schema is not available in this database. Import the mobile schema, then reload.</p>
 <?php else: ?>
+  <?php if ($isUsers): ?>
+  <span hidden data-users-page></span>
+  <div class="stats">
+    <a class="stat" href="users.php"><b><?= (int)$mobileUserCounts['total'] ?></b>Total accounts</a>
+    <a class="stat" href="users.php?status=suspended"><b><?= (int)$mobileUserCounts['suspended'] ?></b>Suspended</a>
+    <a class="stat" href="users.php?status=banned"><b><?= (int)$mobileUserCounts['banned'] ?></b>Banned</a>
+  </div>
+  <?php elseif ($page === 'comments'): ?>
+  <div class="stats">
+    <span class="stat"><b><?= (int)$mobileCommentCounts['total'] ?></b>Total comments</span>
+    <span class="stat"><b><?= (int)$mobileCommentCounts['reported'] ?></b>Reported</span>
+    <span class="stat"><b><?= (int)$mobileCommentCounts['flagged'] ?></b>Flagged</span>
+  </div>
+  <?php elseif (!$isRemoved && !$isReportArchiveView): ?>
   <div class="stats">
     <a class="stat" href="control.php?status=pending"><b><?= (int)$mobileCounts['pending'] ?></b>Pending</a>
     <a class="stat" href="reported.php"><b><?= (int)$mobileCounts['reported'] ?></b>Reported</a>
     <a class="stat" href="control.php?status=pending"><b><?= (int)$mobileCounts['flagged'] ?></b>Flagged</a>
   </div>
+  <?php endif; ?>
   <?php if ($isMobileStandalone): ?><nav class="tabs">
     <a class="<?= $page === 'mobile-feed' ? 'on' : '' ?>" href="mobile-feed.php">Feed</a>
     <a class="<?= $page === 'mobile-queues' ? 'on' : '' ?>" href="mobile-queues.php">Moderation queue</a>
@@ -40,32 +62,121 @@ $heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? '
     <a class="<?= $page === 'mobile-comments' ? 'on' : '' ?>" href="mobile-comments.php">Comments</a>
   </nav><?php endif; ?>
   <form class="searchform" action="<?= h($page) ?>.php" method="get">
+    <?php if ($isRemoved): ?>
+      <select class="removed-type-select" name="type" aria-label="Choose removed content type" onchange="this.form.submit()">
+        <option value="posts"<?= $mobileRemovedType === 'posts' ? ' selected' : '' ?>>Posts</option>
+        <option value="comments"<?= $mobileRemovedType === 'comments' ? ' selected' : '' ?>>Comments</option>
+      </select>
+    <?php endif; ?>
+    <?php if ($isReports): ?>
+      <select class="removed-type-select report-view-select" name="view" aria-label="Choose report or removed content view" onchange="this.form.submit()">
+        <option value="current"<?= $mobileReportView === 'current' ? ' selected' : '' ?>>Current reports</option>
+        <option value="dismissed"<?= $mobileReportView === 'dismissed' ? ' selected' : '' ?>>Dismissed reports</option>
+        <option value="dismissed-comments"<?= $mobileReportView === 'dismissed-comments' ? ' selected' : '' ?>>Dismissed comments</option>
+        <option value="removed-posts"<?= $mobileReportView === 'removed-posts' ? ' selected' : '' ?>>Removed posts</option>
+        <option value="removed-comments"<?= $mobileReportView === 'removed-comments' ? ' selected' : '' ?>>Removed comments</option>
+      </select>
+    <?php endif; ?>
+    <?php if ($isUsers): ?>
+      <select class="removed-type-select" name="status" aria-label="Filter users by account status" onchange="this.form.submit()">
+        <option value="">All accounts</option>
+        <option value="active"<?= $mobileUserFilter === 'active' ? ' selected' : '' ?>>Active</option>
+        <option value="suspended"<?= $mobileUserFilter === 'suspended' ? ' selected' : '' ?>>Suspended</option>
+        <option value="banned"<?= $mobileUserFilter === 'banned' ? ' selected' : '' ?>>Banned</option>
+      </select>
+    <?php endif; ?>
     <input class="search" name="q" value="<?= h($mobileQuery) ?>" placeholder="Search content">
   </form>
   <?php if ($isReports): ?>
-    <?php if ($isMobileStandalone): ?><nav class="tabs">
-      <?php foreach (['pending' => 'Pending', 'reviewed' => 'Reviewed', 'resolved' => 'Resolved', 'dismissed' => 'Dismissed'] as $reportStatus => $reportLabel): ?>
-        <a class="<?= $mobileReportStatus === $reportStatus ? 'on' : '' ?>" href="mobile-reports.php?status=<?= h($reportStatus) ?>"><?= h($reportLabel) ?></a>
-      <?php endforeach; ?>
-    </nav><?php endif; ?>
+    <?php if (!$isReportArchiveView): ?>
     <?php foreach ($mobileReports as $report): ?>
-      <article class="row-item">
-        <span>
-          <b><a href="mobile-post.php?id=<?= (int)$report['post_id'] ?>"><?= h($report['title']) ?></a></b>
-          <br><small>Reported by <?= h($report['reporter_name'] ?: $report['reporter_username']) ?> · <?= h($report['created_at']) ?> · <?= h($report['status']) ?></small>
-          <?php if ($report['reason'] !== null && $report['reason'] !== ''): ?><br><b>Reason:</b> <?= h($report['reason']) ?><?php endif; ?>
-          <?php if ($report['additional_comments'] !== null && $report['additional_comments'] !== ''): ?><br><?= nl2br(h($report['additional_comments'])) ?><?php endif; ?>
-        </span>
-        <?php if (strtolower((string)$report['status']) === 'pending'): ?>
-          <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="report_id" value="<?= (int)$report['id'] ?>"><button class="btn-action secondary" name="action" value="mobile-dismiss-report">Dismiss</button></form>
+      <?php $reportStatus = strtolower((string)$report['status']); ?>
+      <article class="report-card">
+        <div class="report-card-main">
+          <div class="report-card-heading">
+            <a class="report-card-title" href="mobile-post.php?id=<?= (int)$report['post_id'] ?>"><?= h($report['title']) ?></a>
+            <span class="report-status-badge <?= h($reportStatus) ?>"><?= h(ucfirst($reportStatus)) ?></span>
+          </div>
+          <div class="report-card-meta">
+            <span>Reported by <strong><?= h($report['reporter_name'] ?: $report['reporter_username']) ?></strong></span>
+            <time><?= h($report['created_at']) ?></time>
+          </div>
+          <?php if (($report['reason'] ?? '') !== '' || ($report['additional_comments'] ?? '') !== ''): ?>
+            <div class="report-card-details">
+              <?php if (($report['reason'] ?? '') !== ''): ?>
+                <div class="report-card-detail">
+                  <span class="report-card-label">Reason</span>
+                  <p><?= h($report['reason']) ?></p>
+                </div>
+              <?php endif; ?>
+              <?php if (($report['additional_comments'] ?? '') !== ''): ?>
+                <div class="report-card-detail">
+                  <span class="report-card-label">Additional details</span>
+                  <p><?= nl2br(h($report['additional_comments'])) ?></p>
+                </div>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php if (in_array($reportStatus, ['pending', 'dismissed'], true)): ?>
+          <form class="row-actions report-card-actions" method="post">
+            <?= $csrf ?>
+            <input type="hidden" name="report_id" value="<?= (int)$report['id'] ?>">
+            <input type="hidden" name="post_id" value="<?= (int)$report['post_id'] ?>">
+            <?php if ($reportStatus === 'pending'): ?>
+              <button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove post</button>
+              <button class="btn-action secondary" name="action" value="mobile-dismiss-report">Dismiss</button>
+            <?php else: ?>
+              <button class="btn-action approve" name="action" value="mobile-restore-report" onclick="return confirm('Restore this report to current reports?')">Restore</button>
+            <?php endif; ?>
+          </form>
         <?php endif; ?>
       </article>
     <?php endforeach; ?>
-  <?php elseif ($isRemoved): ?>
+    <?php if (!$mobileReports): ?><p class="empty">No reports match this view.</p><?php endif; ?>
+    <?php endif; ?>
+  <?php endif; ?>
+  <?php if ($isDismissedCommentsView): ?>
+    <?php foreach ($mobileDismissedComments as $item): ?>
+      <article class="comment-row">
+        <span class="comment-avatar" aria-hidden="true"><?= h(mb_strtoupper(mb_substr((string)$item['username'], 0, 1))) ?></span>
+        <div class="comment-body">
+          <div class="comment-head">
+            <b><?= h($item['username']) ?></b>
+            <span>commented on</span>
+            <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a>
+            <?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge">AI FLAGGED</span><?php endif; ?>
+          </div>
+          <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
+          <?php if (!empty($item['ai_categories'])): ?><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+        </div>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action approve" name="action" value="mobile-restore-comment" onclick="return confirm('Restore this comment to the mobile app?')">Restore</button></form>
+      </article>
+    <?php endforeach; ?>
+    <?php if (!$mobileDismissedComments): ?><p class="empty">No hidden comments are available to restore.</p><?php endif; ?>
+  <?php elseif ($isRemovedCommentsView): ?>
+    <?php foreach ($mobileRemovedComments as $item): ?>
+      <article class="comment-row">
+        <span class="comment-avatar" aria-hidden="true"><?= h(mb_strtoupper(mb_substr((string)($item['author_username'] ?: $item['author_name']), 0, 1))) ?></span>
+        <div class="comment-body">
+          <div class="comment-head">
+            <b><?= h($item['author_username'] ?: $item['author_name']) ?></b>
+            <span>commented on</span>
+            <b><?= h($item['post_title'] ?: 'a deleted post') ?></b>
+            <?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge">AI FLAGGED</span><?php endif; ?>
+          </div>
+          <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
+          <span class="flag">Removed <?= h($item['removed_at']) ?><?= !empty($item['removed_by_name']) ? ' by ' . h($item['removed_by_name']) : '' ?></span>
+        </div>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="archive_id" value="<?= (int)$item['id'] ?>"><button class="btn-action approve" name="action" value="mobile-restore-comment-archive" onclick="return confirm('Restore this comment to the mobile app?')">Restore</button></form>
+      </article>
+    <?php endforeach; ?>
+    <?php if (!$mobileRemovedComments): ?><p class="empty">No removed comments are available to restore.</p><?php endif; ?>
+  <?php elseif ($isRemovedPostsView): ?>
     <?php foreach ($mobileRemovedPosts as $item): ?>
       <div class="row-item mobile-post-row">
         <span class="post-main-info">
-          <b><?= h($item['title']) ?></b><?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php endif; ?><?php if (!empty($item['ai_categories'])): ?><br><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+          <b><a href="mobile-post.php?id=<?= (int)$item['mobile_post_id'] ?>&archive=1"><?= h($item['title']) ?></a></b><?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php endif; ?><?php if (!empty($item['ai_categories'])): ?><br><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
         </span>
         <dl class="post-meta-table">
           <div class="post-meta-row">
@@ -81,20 +192,22 @@ $heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? '
             <dd><?= h($item['removed_at']) ?><?= !empty($item['removed_by_name']) ? ' by ' . h($item['removed_by_name']) : '' ?></dd>
           </div>
         </dl>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="archive_id" value="<?= (int)$item['id'] ?>"><button class="btn-action approve" name="action" value="mobile-restore-post" onclick="return confirm('Restore this post to the mobile app?')">Restore</button></form>
       </div>
     <?php endforeach; ?>
-    <?php if (!$mobileRemovedPosts): ?><p class="empty">No removed posts yet. Posts removed from Control Posts/Feed will appear here.</p><?php endif; ?>
+    <?php if (!$mobileRemovedPosts): ?><p class="empty">No removed posts are available to restore.</p><?php endif; ?>
   <?php elseif ($isUsers): ?>
     <?php foreach ($mobileUsers as $item): ?>
-      <div class="row-item user-list-row">
+      <div class="row-item user-list-row" data-mobile-user-row="<?= (int)$item['id'] ?>">
         <div class="user-item-info">
           <?php if (!empty($item['profile_pic_url'])): ?>
             <img class="registered-user-avatar" src="<?= h($item['profile_pic_url']) ?>" alt="">
           <?php else: ?>
             <span class="registered-user-avatar registered-user-initial"><?= h(mb_strtoupper(mb_substr((string)$item['full_name'], 0, 1))) ?></span>
           <?php endif; ?>
-          <span class="user-list-identity"><b><?= h($item['full_name']) ?></b> (@<?= h($item['username']) ?>)<small><?= h($item['institutional_email']) ?><?= $item['moderation_status'] === 'suspended' ? ' · suspended' : '' ?></small></span>
+          <span class="user-list-identity"><b><?= h($item['full_name']) ?></b> (@<?= h($item['username']) ?>)<small><?= h($item['institutional_email']) ?><span data-mobile-user-status><?= $item['moderation_status'] !== 'active' ? ' · ' . h($item['moderation_status']) : '' ?></span><?php if ($item['moderation_status'] === 'suspended' && !empty($item['suspended_until'])): ?> · Lifts <?php if ($item['suspension_timezone_offset'] !== null): ?><time data-suspension-lift data-utc="<?= h((new DateTimeImmutable((string)$item['suspended_until'], new DateTimeZone('UTC')))->format(DATE_ATOM)) ?>"><?= h($item['suspended_until']) ?> UTC</time><?php else: ?><?= h(date('M j, Y g:i A', strtotime((string)$item['suspended_until']))) ?><?php endif; ?><?php endif; ?></small></span>
         </div>
+        <a class="user-stats-link" href="user.php?id=<?= (int)$item['id'] ?>" title="View all posts and comments by this user">
         <dl class="post-meta-table user-stats-table" aria-label="User activity">
           <div class="post-meta-row">
             <dt>Posts</dt>
@@ -104,15 +217,36 @@ $heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? '
             <dt>Comments</dt>
             <dd><?= (int)$item['comments_count'] ?></dd>
           </div>
+          <div class="post-meta-row" title="AI-flagged posts and comments, plus removed posts">
+            <dt>Violations</dt>
+            <dd><?= (int)$item['violation_count'] ?></dd>
+          </div>
         </dl>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>"><button class="btn-action <?= $item['moderation_status'] === 'suspended' ? 'approve' : 'remove' ?>" name="action" value="mobile-<?= $item['moderation_status'] === 'suspended' ? 'restore-user' : 'suspend-user' ?>"><?= $item['moderation_status'] === 'suspended' ? 'Restore' : 'Suspend' ?></button></form>
+        </a>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>"><?php if ($item['moderation_status'] === 'active'): ?><button class="btn-action remove" type="button" data-open-suspension data-user-id="<?= (int)$item['id'] ?>">Suspend</button><button class="btn-action ban" name="action" value="mobile-ban-user" onclick="return confirm('Ban this user?')">Banned</button><?php else: ?><button class="btn-action approve" name="action" value="mobile-restore-user"><?= $item['moderation_status'] === 'banned' ? 'Unban' : 'Restore' ?></button><?php endif; ?></form>
       </div>
     <?php endforeach; ?>
+    <?php if (!$mobileUsers): ?><p class="empty">No users match this filter.</p><?php endif; ?>
   <?php elseif ($isComments): ?>
     <?php foreach ($mobileComments as $item): ?>
-      <div class="row-item"><span><b><?= h($item['username']) ?></b> on <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a><br><?= h($item['content']) ?><?= !empty($item['ai_flagged']) ? '<br><span class="flag">AI flagged</span>' : (!empty($item['ai_categories']) ? '<br><span class="flag">AI review required</span>' : '') ?></span><form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Delete this comment from the mobile app?')">Delete</button></form></div>
+      <?php $commentAiFlagged = !empty($item['ai_flagged']); ?>
+      <article class="comment-row">
+        <span class="comment-avatar" aria-hidden="true"><?= h(mb_strtoupper(mb_substr((string)$item['username'], 0, 1))) ?></span>
+        <div class="comment-body">
+          <div class="comment-head">
+            <b><?= h($item['username']) ?></b>
+            <span>commented on</span>
+            <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a>
+            <?php if ($commentAiFlagged): ?><span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php elseif (!empty($item['ai_categories'])): ?><span class="ai-review-badge" title="This comment requires moderation review">AI REVIEW</span><?php endif; ?>
+          </div>
+          <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
+          <?php if (!empty($item['ai_categories'])): ?><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+        </div>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Delete this comment from the mobile app?')">Delete</button></form>
+      </article>
     <?php endforeach; ?>
-  <?php else: ?>
+    <?php if (!$mobileComments): ?><p class="empty">No comments to show.</p><?php endif; ?>
+  <?php elseif (!$isReports): ?>
     <?php foreach ($mobilePosts as $item): ?>
       <?php $aiFlagged = !empty($item['ai_flagged']); $aiReviewRequired = $aiFlagged || !empty($item['ai_categories']); ?>
       <div class="row-item mobile-post-row">
@@ -166,5 +300,62 @@ $heading = $isUsers ? 'Users' : ($isRemoved ? 'Removed Posts' : ($isComments ? '
         <a class="button" href="users.php">View all users</a>
       </section>
     </div>
+  <?php endif; ?>
+  <?php if ($isUsers): ?>
+    <dialog class="suspension-dialog" data-suspension-dialog aria-labelledby="suspension-dialog-title">
+      <form method="post" class="suspension-dialog-form">
+        <?= $csrf ?>
+        <input type="hidden" name="action" value="mobile-suspend-user">
+        <input type="hidden" name="user_id" value="" data-suspension-user-id>
+        <input type="hidden" name="suspended_until" value="" data-suspension-value>
+        <input type="hidden" name="suspension_timezone_offset" value="" data-suspension-timezone>
+        <header class="suspension-dialog-heading">
+          <span class="suspension-dialog-icon" aria-hidden="true">!</span>
+          <div>
+            <h3 id="suspension-dialog-title">Suspend user</h3>
+            <p>Choose when this account can return.</p>
+          </div>
+        </header>
+        <section class="suspension-calendar" aria-label="Choose suspension end date">
+          <div class="suspension-calendar-heading">
+            <button class="calendar-nav" type="button" aria-label="Previous month" data-calendar-previous>&lsaquo;</button>
+            <strong data-calendar-month></strong>
+            <button class="calendar-nav" type="button" aria-label="Next month" data-calendar-next>&rsaquo;</button>
+          </div>
+          <div class="suspension-weekdays" aria-hidden="true">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div class="suspension-calendar-days" role="group" aria-label="Calendar dates" data-calendar-days></div>
+        </section>
+        <section class="suspension-time" aria-label="Choose suspension end time">
+          <label>Lift time</label>
+          <div class="suspension-time-controls">
+            <select aria-label="Hour" data-suspension-hour>
+              <option value="">Hour</option>
+              <?php for ($hour = 1; $hour <= 12; $hour++): ?>
+                <option value="<?= $hour ?>"><?= sprintf('%02d', $hour) ?></option>
+              <?php endfor; ?>
+            </select>
+            <span>:</span>
+            <select aria-label="Minute" data-suspension-minute>
+              <option value="">Min</option>
+              <?php for ($minute = 0; $minute < 60; $minute++): ?>
+                <option value="<?= $minute ?>"><?= sprintf('%02d', $minute) ?></option>
+              <?php endfor; ?>
+            </select>
+            <select aria-label="AM or PM" data-suspension-period>
+              <option value="">AM/PM</option>
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </div>
+        </section>
+        <p class="suspension-selection" aria-live="polite" tabindex="-1" data-suspension-selection>Select a date and time.</p>
+        <div class="suspension-dialog-actions">
+          <button class="btn-action secondary" type="button" data-close-suspension>Cancel</button>
+          <button class="btn-action remove" type="submit" data-suspension-submit disabled>Confirm suspension</button>
+        </div>
+      </form>
+    </dialog>
   <?php endif; ?>
 <?php endif; ?>

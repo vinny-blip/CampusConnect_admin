@@ -1,4 +1,4 @@
-<h2>Profile</h2>
+<h2 class="profile-title">Profile</h2>
 <div class="profile-summary">
   <?php if (!empty($user['profile_image'])): ?>
     <span class="avatar big profile-image"><img src="<?= h($user['profile_image']) ?>" alt="Profile picture"></span>

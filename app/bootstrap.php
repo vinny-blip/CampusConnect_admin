@@ -8,6 +8,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/helpers.php';
 
+// Load controller, model, and view classes from their matching folders on demand.
 spl_autoload_register(static function (string $class): void {
     $paths = [
         __DIR__ . '/Controllers/' . $class . '.php',

@@ -5,6 +5,7 @@ final class Database
 {
     private static ?PDO $connection = null;
 
+    /** Connects to MySQL, verifies required tables, and applies setup migrations. */
     public static function connection(): PDO
     {
         if (self::$connection instanceof PDO) {
@@ -46,6 +47,23 @@ final class Database
             }
             $mysql->query('SELECT id, name, email, password_hash, role, profile_image FROM admin_users LIMIT 0');
             $mysql->query('SELECT user_id, state_key, state_data FROM admin_app_state LIMIT 0');
+            // Store mobile login times and a hash of each session token for secure lookups.
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS admin_mobile_login_logs (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    mobile_user_id INT NOT NULL,
+                    full_name VARCHAR(100) NOT NULL,
+                    username VARCHAR(50) NOT NULL,
+                    institutional_email VARCHAR(100) NOT NULL,
+                    session_token_hash CHAR(64) NOT NULL,
+                    login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_activity_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    logout_at DATETIME NULL,
+                    UNIQUE KEY admin_mobile_login_token (session_token_hash),
+                    INDEX admin_mobile_login_active (logout_at, last_activity_at),
+                    INDEX admin_mobile_login_user (mobile_user_id, login_at)
+                ) ENGINE=InnoDB'
+            );
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_system_migrations (
                     migration_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -130,7 +148,36 @@ final class Database
                     removed_by_name VARCHAR(120) NULL,
                     post_created_at TIMESTAMP NULL,
                     removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    post_data LONGTEXT NULL,
                     INDEX admin_removed_post_removed_at (removed_at)
+                ) ENGINE=InnoDB'
+            );
+            $postDataColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_removed_mobile_posts' AND COLUMN_NAME = 'post_data'"
+            )->fetchColumn();
+            if ((int)$postDataColumn === 0) {
+                $mysql->exec('ALTER TABLE admin_removed_mobile_posts ADD COLUMN post_data LONGTEXT NULL');
+            }
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS admin_removed_mobile_comments (
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    mobile_comment_id INT NOT NULL,
+                    mobile_post_id INT NOT NULL,
+                    mobile_user_id INT NOT NULL,
+                    content TEXT NULL,
+                    post_title VARCHAR(255) NULL,
+                    author_name VARCHAR(255) NULL,
+                    author_username VARCHAR(255) NULL,
+                    ai_flagged TINYINT(1) NOT NULL DEFAULT 0,
+                    ai_categories VARCHAR(1000) NULL,
+                    reason VARCHAR(500) NULL,
+                    removed_by BIGINT UNSIGNED NULL,
+                    removed_by_name VARCHAR(120) NULL,
+                    comment_created_at TIMESTAMP NULL,
+                    removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    comment_data LONGTEXT NULL,
+                    INDEX admin_removed_comment_removed_at (removed_at)
                 ) ENGINE=InnoDB'
             );
             $mysql->exec(
@@ -151,7 +198,9 @@ final class Database
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_mobile_user_moderation (
                     mobile_user_id INT NOT NULL PRIMARY KEY,
-                    status ENUM("active","suspended") NOT NULL DEFAULT "active",
+                    status ENUM("active","suspended","banned") NOT NULL DEFAULT "active",
+                    suspended_until DATETIME NULL,
+                    suspension_timezone_offset SMALLINT NULL,
                     reason VARCHAR(500) NULL,
                     moderated_by BIGINT UNSIGNED NULL,
                     moderated_at TIMESTAMP NULL,
@@ -159,6 +208,29 @@ final class Database
                     INDEX admin_mobile_user_status (status)
                 ) ENGINE=InnoDB'
             );
+            $userStatusType = (string)$mysql->query(
+                "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_mobile_user_moderation' AND COLUMN_NAME = 'status'"
+            )->fetchColumn();
+            if ($userStatusType !== '' && !str_contains($userStatusType, 'banned')) {
+                $mysql->exec("ALTER TABLE admin_mobile_user_moderation MODIFY status ENUM('active','suspended','banned') NOT NULL DEFAULT 'active'");
+            }
+            $suspensionExpiryType = (string)$mysql->query(
+                "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_mobile_user_moderation' AND COLUMN_NAME = 'suspended_until'"
+            )->fetchColumn();
+            if ($suspensionExpiryType === '') {
+                $mysql->exec('ALTER TABLE admin_mobile_user_moderation ADD COLUMN suspended_until DATETIME NULL AFTER status');
+            } elseif ($suspensionExpiryType === 'date') {
+                $mysql->exec('ALTER TABLE admin_mobile_user_moderation MODIFY suspended_until DATETIME NULL');
+            }
+            $suspensionTimezoneColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_mobile_user_moderation' AND COLUMN_NAME = 'suspension_timezone_offset'"
+            )->fetchColumn();
+            if ((int)$suspensionTimezoneColumn === 0) {
+                $mysql->exec('ALTER TABLE admin_mobile_user_moderation ADD COLUMN suspension_timezone_offset SMALLINT NULL AFTER suspended_until');
+            }
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS mobile_notifications (
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

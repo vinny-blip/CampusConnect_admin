@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 class StateModel
 {
+    /** Sets the database connection and account that owns saved state. */
     public function __construct(
         protected PDO $db,
         protected int $userId
     ) {
     }
 
+    /** Loads saved JSON state, creating and storing initial data when absent. */
     protected function load(string $key, callable $initializer): array
     {
         $statement = $this->db->prepare('SELECT state_data FROM admin_app_state WHERE user_id = ? AND state_key = ?');
@@ -27,6 +29,7 @@ class StateModel
         return $initial;
     }
 
+    /** Stores an account's state as JSON in MySQL. */
     protected function save(string $key, array $data): void
     {
         $statement = $this->db->prepare(

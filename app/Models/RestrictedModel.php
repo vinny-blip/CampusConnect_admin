@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 final class RestrictedModel
 {
+    /** Shares the database connection for moderator restriction records. */
     public function __construct(private PDO $db)
     {
     }
 
+    /** Lists restricted moderator accounts and their reasons. */
     public function list(): array
     {
         $statement = $this->db->query(
@@ -18,6 +20,7 @@ final class RestrictedModel
         return $statement->fetchAll();
     }
 
+    /** Checks whether a dashboard account is currently restricted. */
     public function isRestricted(int $userId): bool
     {
         $statement = $this->db->prepare('SELECT 1 FROM admin_user_restrictions WHERE user_id = ?');
@@ -25,6 +28,7 @@ final class RestrictedModel
         return $statement->fetchColumn() !== false;
     }
 
+    /** Restricts a moderator by email and returns an error message if rejected. */
     public function add(string $email, string $reason, int $adminId): ?string
     {
         $email = mb_strtolower(trim($email));
@@ -56,6 +60,7 @@ final class RestrictedModel
         return null;
     }
 
+    /** Removes a restriction from a moderator account. */
     public function remove(int $userId): void
     {
         $statement = $this->db->prepare('DELETE FROM admin_user_restrictions WHERE user_id = ?');

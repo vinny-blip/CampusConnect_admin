@@ -1,9 +1,12 @@
 Options -Indexes
 RewriteEngine On
 
+# Block direct access to application code, configuration, and repository files.
 RewriteRule ^(?:app|config|storage)(?:/|$) - [F,L,NC]
-RewriteRule ^(?:\.git|\.env|composer\.(?:json|lock)|config/database\.local\.php)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:\.git|\.env(?:\..*)?|composer\.(?:json|lock)|config/database\.local\.php)(?:/|$) - [F,L,NC]
 RewriteRule ^public/ - [F,L,NC]
+
+# Route page requests through the shared front controller and serve static assets.
 RewriteRule ^$ public/index.php [END]
 RewriteRule ^assets/(.*)$ public/assets/$1 [END]
 RewriteRule ^uploads/(.*)$ public/uploads/$1 [END]

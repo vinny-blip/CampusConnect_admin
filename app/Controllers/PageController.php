@@ -5,6 +5,7 @@ final class PageController
 {
     private ?PDO $db = null;
     private ?UserModel $users = null;
+    private ?MobileLoginLogModel $mobileLoginLogs = null;
     private ?array $user = null;
     private ?PostModel $posts = null;
     private ?NotificationModel $notifications = null;
@@ -13,6 +14,7 @@ final class PageController
     private ?MobileModerationModel $mobile = null;
     private string $page;
 
+    /** Prepares the database and records which dashboard page was requested. */
     public function __construct(string $page)
     {
         $this->page = $page;
@@ -44,6 +46,7 @@ final class PageController
         }
     }
 
+    /** Authenticates the request, handles actions, and renders the page. */
     public function run(): void
     {
         $this->user = $this->users !== null && isset($_SESSION['user_id'])
@@ -73,6 +76,34 @@ final class PageController
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->handlePost();
+        }
+        if ($this->page === 'logs' && isset($_GET['poll'])) {
+            // Send refreshed counts and session rows to the Logs page.
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'active_users' => $this->mobileLoginLogs()->activeUserCount(),
+                'sessions' => $this->mobileLoginLogs()->recentSessions(),
+            ], JSON_THROW_ON_ERROR);
+            exit;
+        }
+        if ($this->page === 'users' && isset($_GET['poll'])) {
+            // Expire due suspensions and return minimal status data for the live Users list.
+            $timezoneOffset = filter_var($_GET['timezone_offset'] ?? null, FILTER_VALIDATE_INT);
+            $timezoneOffset = $timezoneOffset !== false && abs($timezoneOffset) <= 840 ? $timezoneOffset : null;
+            $restored = $this->mobile->restoreExpiredUserSuspensions($timezoneOffset);
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'restored' => $restored,
+                'users' => array_map(
+                    static fn(array $mobileUser): array => [
+                        'id' => (int)$mobileUser['id'],
+                        'moderation_status' => (string)$mobileUser['moderation_status'],
+                    ],
+                    $this->mobile->userStatuses()
+                ),
+            ], JSON_THROW_ON_ERROR);
+            exit;
         }
         $this->syncAiFlaggedPostNotifications();
         if ($this->page === 'notifications' && isset($_GET['poll'])) {
@@ -106,6 +137,7 @@ final class PageController
         );
     }
 
+    /** Creates the data models used by authenticated dashboard pages. */
     private function initializeModels(int $userId): void
     {
         $this->posts = new PostModel($this->db, $userId);
@@ -115,6 +147,17 @@ final class PageController
         $this->mobile = new MobileModerationModel($this->db, $userId);
     }
 
+    /** Creates the login-log model only when the Logs page needs it. */
+    /** Creates the login-log model only when the Logs page needs it. */
+    private function mobileLoginLogs(): MobileLoginLogModel
+    {
+        if ($this->mobileLoginLogs === null) {
+            $this->mobileLoginLogs = new MobileLoginLogModel($this->db);
+        }
+        return $this->mobileLoginLogs;
+    }
+
+    /** Adds notifications for newly AI-flagged mobile posts and comments. */
     private function syncAiFlaggedPostNotifications(): void
     {
         if (!$this->mobile->available()) {
@@ -133,9 +176,24 @@ final class PageController
                 'link' => 'mobile-post.php?id=' . $postId . '&notification=ai-flagged',
             ];
         }
+        foreach ($this->mobile->recentlyAiFlaggedComments() as $comment) {
+            $snippet = trim((string)$comment['content']);
+            if (mb_strlen($snippet) > 60) {
+                $snippet = mb_substr($snippet, 0, 57) . '...';
+            }
+            $name = trim((string)$comment['full_name']);
+            $college = trim((string)($comment['college'] ?? ''));
+            $notifications[] = [
+                'text' => 'AI flagged a comment by ' . ($name !== '' ? $name : 'Unknown user')
+                    . ' from ' . ($college !== '' ? $college : 'an unspecified college') . ': '
+                    . ($snippet !== '' ? $snippet : 'Empty comment'),
+                'link' => 'mobile-post.php?id=' . (int)$comment['post_id'] . '&comment=' . (int)$comment['id'] . '&notification=ai-flagged',
+            ];
+        }
         $this->notifications->addManyOnce($notifications);
     }
 
+    /** Validates the request token and dispatches the submitted form action. */
     private function handlePost(): void
     {
         $expectedToken = (string)($_SESSION['csrf_token'] ?? '');
@@ -182,8 +240,8 @@ final class PageController
 
         $allowedActions = match ($this->page) {
             'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
-            'home', 'posts', 'control', 'reported', 'comments', 'removed'
-                => ['mobile-approve', 'mobile-remove', 'mobile-delete-comment', 'mobile-hide-comment', 'mobile-restore-comment', 'mobile-suspend-user', 'mobile-restore-user', 'mobile-dismiss-report', 'toggle-ai-moderation'],
+            'home', 'posts', 'control', 'reported', 'comments', 'removed', 'users'
+                => ['mobile-approve', 'mobile-remove', 'mobile-restore-post', 'mobile-restore-comment-archive', 'mobile-delete-comment', 'mobile-hide-comment', 'mobile-restore-comment', 'mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user', 'mobile-dismiss-report', 'mobile-restore-report', 'toggle-ai-moderation'],
             'home', 'posts', 'control', 'reported', 'search'
                 => ['like', 'pin', 'restore', 'remove', 'mobile-dismiss-report'],
             'post' => [
@@ -201,13 +259,19 @@ final class PageController
             http_response_code(400);
             exit('Unsupported form action.');
         }
-        if (str_starts_with($this->page, 'mobile-') || in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments'], true)) {
+        if (str_starts_with($this->page, 'mobile-') || in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments', 'removed', 'users'], true)) {
             if ($action === 'toggle-ai-moderation') {
                 $this->aiModeration->setEnabled((string)($_POST['enabled'] ?? '0') === '1');
                 $this->flash('AI Moderation setting updated.');
             } elseif ($action === 'mobile-remove') {
                 $removed = $this->mobile->removePost((int)($_POST['post_id'] ?? 0));
                 $this->flash($removed ? 'Mobile post removed and the user was notified.' : 'Mobile post was not found.', $removed ? 'success' : 'error');
+            } elseif ($action === 'mobile-restore-comment-archive') {
+                $restored = $this->mobile->restoreComment((int)($_POST['archive_id'] ?? 0));
+                $this->flash($restored ? 'Comment restored to the mobile app.' : 'This comment could not be restored (its post may no longer exist).', $restored ? 'success' : 'error');
+            } elseif ($action === 'mobile-restore-post') {
+                $restored = $this->mobile->restorePost((int)($_POST['archive_id'] ?? 0));
+                $this->flash($restored ? 'Post restored to the mobile app.' : 'This post could not be restored.', $restored ? 'success' : 'error');
             } elseif ($action === 'mobile-approve') {
                 $this->mobile->setPostStatus((int)($_POST['post_id'] ?? 0), 'approved', (string)($_POST['reason'] ?? ''));
                 $this->flash('Mobile post status updated.');
@@ -218,13 +282,60 @@ final class PageController
                 $status = $action === 'mobile-hide-comment' ? 'hidden' : 'approved';
                 $this->mobile->setCommentStatus((int)($_POST['comment_id'] ?? 0), $status);
                 $this->flash('Mobile comment status updated.');
-            } elseif ($action === 'mobile-suspend-user' || $action === 'mobile-restore-user') {
-                $status = $action === 'mobile-suspend-user' ? 'suspended' : 'active';
-                $this->mobile->setUserStatus((int)($_POST['user_id'] ?? 0), $status, (string)($_POST['reason'] ?? ''));
-                $this->flash('Mobile user status updated.');
+            } elseif (in_array($action, ['mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user'], true)) {
+                $status = ['mobile-suspend-user' => 'suspended', 'mobile-ban-user' => 'banned', 'mobile-restore-user' => 'active'][$action];
+                $suspendedUntil = null;
+                $suspensionTimezoneOffset = null;
+                if ($status === 'suspended') {
+                    $submittedDateTime = (string)($_POST['suspended_until'] ?? '');
+                    $suspensionTimezoneOffset = filter_var(
+                        $_POST['suspension_timezone_offset'] ?? null,
+                        FILTER_VALIDATE_INT
+                    );
+                    $suspensionTimezoneOffset = $suspensionTimezoneOffset === false ? null : $suspensionTimezoneOffset;
+                    if ($suspensionTimezoneOffset === null || abs($suspensionTimezoneOffset) > 840) {
+                        $this->flash('The browser time zone could not be verified. Refresh the page and try again.', 'error');
+                        $this->redirect($this->returnUrl());
+                    }
+                    $offsetFromUtc = -$suspensionTimezoneOffset;
+                    $offset = sprintf(
+                        '%s%02d:%02d',
+                        $offsetFromUtc >= 0 ? '+' : '-',
+                        intdiv(abs($offsetFromUtc), 60),
+                        abs($offsetFromUtc) % 60
+                    );
+                    $parsedDateTime = DateTimeImmutable::createFromFormat(
+                        '!Y-m-d\TH:iP',
+                        $submittedDateTime . $offset
+                    );
+                    if ($parsedDateTime === false
+                        || $parsedDateTime->format('Y-m-d\TH:i') !== $submittedDateTime
+                        || $parsedDateTime <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+                        $this->flash('Choose a suspension lift date and time in the future.', 'error');
+                        $this->redirect($this->returnUrl());
+                    }
+                    $suspendedUntil = $parsedDateTime->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+                }
+                $updated = $this->mobile->setUserStatus(
+                    (int)($_POST['user_id'] ?? 0),
+                    $status,
+                    (string)($_POST['reason'] ?? ''),
+                    $suspendedUntil,
+                    $suspensionTimezoneOffset
+                );
+                $this->flash(
+                    $updated ? ($status === 'suspended' ? 'User suspension lift time was saved.' : 'Mobile user status updated.') : 'Mobile user status could not be updated.',
+                    $updated ? 'success' : 'error'
+                );
             } elseif ($action === 'mobile-dismiss-report') {
                 $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
                 $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
+            } elseif ($action === 'mobile-restore-report') {
+                $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Pending');
+                $this->flash($updated ? 'Report restored to current reports.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
+                $this->redirect($updated
+                    ? ($this->page === 'mobile-reports' ? 'mobile-reports.php?view=current' : 'reported.php?view=current')
+                    : $this->returnUrl());
             }
             $this->redirect($this->returnUrl());
         }
@@ -281,6 +392,7 @@ final class PageController
         $this->redirect($this->returnUrl());
     }
 
+    /** Handles feed-related actions such as publishing or searching posts. */
     private function handleFeedAction(string $action): void
     {
         $id = (int)($_POST['post_id'] ?? 0);
@@ -297,6 +409,7 @@ final class PageController
         }
     }
 
+    /** Prevents non-admin users from changing the AI moderation review setting. */
     private function requireAdminForAiReview(bool $needsReview): void
     {
         if ($needsReview && ($this->user['role'] ?? '') !== 'admin') {
@@ -305,6 +418,7 @@ final class PageController
         }
     }
 
+    /** Performs the selected moderation action on a post. */
     private function handlePostAction(string $action): void
     {
         $id = (int)($_GET['id'] ?? $_POST['post_id'] ?? 0);
@@ -375,6 +489,7 @@ final class PageController
         }
     }
 
+    /** Performs the selected moderation action on a comment. */
     private function handleCommentAction(string $action): void
     {
         $postId = (int)($_POST['post_id'] ?? 0);
@@ -397,6 +512,7 @@ final class PageController
         }
     }
 
+    /** Checks submitted text and an optional image with AI moderation. */
     private function moderateSubmission(string $text, string $image = ''): array
     {
         if (!$this->aiModeration->enabled()) {
@@ -408,6 +524,7 @@ final class PageController
         return $result;
     }
 
+    /** Handles account profile, password, and profile-image changes. */
     private function handleProfileAction(string $action): void
     {
         if ($action === 'update-name') {
@@ -437,6 +554,7 @@ final class PageController
         }
     }
 
+    /** Validates and saves an uploaded dashboard profile picture. */
     private function updateProfilePicture(): void
     {
         $upload = $_FILES['profile_picture'] ?? null;
@@ -516,6 +634,7 @@ final class PageController
         $this->flash('Profile picture updated.');
     }
 
+    /** Adds or removes a moderator restriction submitted by an admin. */
     private function handleRestrictedAction(string $action): void
     {
         if ($action === 'restrict') {
@@ -531,6 +650,7 @@ final class PageController
         }
     }
 
+    /** Gathers the data required to render the current dashboard page. */
     private function pageData(): array
     {
         if (in_array($this->page, ['login', 'register'], true)) {
@@ -540,18 +660,48 @@ final class PageController
             'user' => $this->user,
             'noteCount' => $this->notifications->unread(),
         ];
-        if (in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments', 'removed', 'users'], true)) {
+        if (in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments', 'removed', 'users', 'mobile-reports'], true)) {
             $data['mobileAvailable'] = $this->mobile->available();
             $data['mobileCounts'] = $this->mobile->counts();
+            $data['mobileCommentCounts'] = $this->page === 'comments' ? $this->mobile->commentCounts() : [];
             $data['mobileQuery'] = trim((string)($_GET['q'] ?? ''));
             $data['mobileStatus'] = $this->page === 'home'
                 ? 'approved'
                 : ($this->page === 'reported' ? 'pending' : (string)($_GET['status'] ?? ''));
-            $data['mobilePosts'] = in_array($this->page, ['comments', 'reported', 'removed'], true)
+            $data['mobilePosts'] = in_array($this->page, ['comments', 'reported', 'removed', 'mobile-reports'], true)
                 ? []
                 : $this->mobile->posts($data['mobileStatus'], $data['mobileQuery']);
-            $data['mobileRemovedPosts'] = $this->page === 'removed'
+            if ($this->page === 'home') {
+                $data['mobilePosts'] = array_values(array_filter(
+                    $data['mobilePosts'],
+                    static fn(array $post): bool => empty($post['ai_flagged'])
+                ));
+            }
+            $reportViews = ['current', 'dismissed', 'dismissed-comments', 'removed-posts', 'removed-comments'];
+            $legacyReportStatus = (string)($_GET['status'] ?? 'pending');
+            $legacyReportView = $legacyReportStatus === 'pending' ? 'current' : $legacyReportStatus;
+            $requestedReportView = (string)($_GET['view'] ?? $legacyReportView);
+            $data['mobileReportView'] = in_array($requestedReportView, $reportViews, true)
+                ? $requestedReportView
+                : 'current';
+            $data['mobileRemovedType'] = $this->page === 'removed'
+                ? (($_GET['type'] ?? 'posts') === 'comments' ? 'comments' : 'posts')
+                : ($data['mobileReportView'] === 'removed-comments' ? 'comments' : 'posts');
+            $showRemovedPosts = $this->page === 'removed'
+                ? $data['mobileRemovedType'] === 'posts'
+                : in_array($this->page, ['reported', 'mobile-reports'], true) && $data['mobileReportView'] === 'removed-posts';
+            $showRemovedComments = $this->page === 'removed'
+                ? $data['mobileRemovedType'] === 'comments'
+                : in_array($this->page, ['reported', 'mobile-reports'], true) && $data['mobileReportView'] === 'removed-comments';
+            $data['mobileRemovedPosts'] = $showRemovedPosts
                 ? $this->mobile->removedPosts($data['mobileQuery'])
+                : [];
+            $data['mobileRemovedComments'] = $showRemovedComments
+                ? $this->mobile->removedComments($data['mobileQuery'])
+                : [];
+            $data['mobileDismissedComments'] = in_array($this->page, ['reported', 'mobile-reports'], true)
+                    && $data['mobileReportView'] === 'dismissed-comments'
+                ? $this->mobile->dismissedComments($data['mobileQuery'])
                 : [];
             if ($this->page === 'users') {
                 $data['mobilePosts'] = [];
@@ -560,12 +710,29 @@ final class PageController
                 ? $this->mobile->comments($data['mobileQuery'])
                 : [];
             $data['mobileUsers'] = in_array($this->page, ['home', 'users'], true)
-                ? $this->mobile->users('')
+                ? $this->mobile->users($this->page === 'users' ? $data['mobileQuery'] : '')
                 : [];
-            $data['mobileReports'] = $this->page === 'reported'
-                ? $this->mobile->reports('pending', $data['mobileQuery'])
+            $data['mobileUserFilter'] = in_array($_GET['status'] ?? '', ['active', 'suspended', 'banned'], true) ? (string)$_GET['status'] : '';
+            $statusCounts = array_count_values(array_column($data['mobileUsers'], 'moderation_status'));
+            $data['mobileUserCounts'] = [
+                'total' => count($data['mobileUsers']),
+                'suspended' => $statusCounts['suspended'] ?? 0,
+                'banned' => $statusCounts['banned'] ?? 0,
+            ];
+            if ($this->page === 'users' && $data['mobileUserFilter'] !== '') {
+                $data['mobileUsers'] = array_values(array_filter(
+                    $data['mobileUsers'],
+                    fn($u) => $u['moderation_status'] === $data['mobileUserFilter']
+                ));
+            }
+            $reportStatus = $data['mobileReportView'] === 'current'
+                ? 'pending'
+                : $data['mobileReportView'];
+            $data['mobileReports'] = in_array($this->page, ['reported', 'mobile-reports'], true)
+                    && in_array($data['mobileReportView'], ['current', 'reviewed', 'resolved', 'dismissed'], true)
+                ? $this->mobile->reports($reportStatus, $data['mobileQuery'])
                 : [];
-            $data['mobileReportStatus'] = 'pending';
+            $data['mobileReportStatus'] = $reportStatus;
             $data['aiModerationEnabled'] = $this->aiModeration->enabled();
             $data['aiModerationConfigured'] = $this->aiModeration->configured();
             $reportRange = (string)($_GET['report_range'] ?? '7');
@@ -592,36 +759,42 @@ final class PageController
             $data['reportCountsByDate'] = $this->mobile->reportCountsByDate($reportDays);
         } elseif ($this->page === 'notifications') {
             $data['notifications'] = $this->notifications->list();
+        } elseif ($this->page === 'logs') {
+            // Supply the initial values before the browser starts polling.
+            $data['activeUserCount'] = $this->mobileLoginLogs()->activeUserCount();
+            $data['loginSessions'] = $this->mobileLoginLogs()->recentSessions();
         } elseif ($this->page === 'restricted') {
             $data['restrictedUsers'] = $this->restricted->list();
         } elseif ($this->page === 'comments') {
             $data['comments'] = $this->posts->comments();
-        } elseif (in_array($this->page, ['mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-comments'], true)) {
+        } elseif (in_array($this->page, ['mobile-feed', 'mobile-queues', 'mobile-comments'], true)) {
             $data['mobileAvailable'] = $this->mobile->available();
             $data['mobileCounts'] = $this->mobile->counts();
             $query = trim((string)($_GET['q'] ?? ''));
             $data['mobileQuery'] = $query;
             if ($this->page === 'mobile-comments') {
                 $data['mobileComments'] = $this->mobile->comments($query);
-            } elseif ($this->page === 'mobile-reports') {
-                $status = (string)($_GET['status'] ?? 'pending');
-                $data['mobileReports'] = $this->mobile->reports($status, $query);
-                $data['mobileReportStatus'] = $status;
             } else {
                 $status = $this->page === 'mobile-queues' ? (string)($_GET['status'] ?? 'pending') : (string)($_GET['status'] ?? '');
                 $data['mobilePosts'] = $this->mobile->posts($status, $query);
                 $data['mobileStatus'] = $status;
             }
+        } elseif ($this->page === 'user') {
+            $data['mobileAvailable'] = $this->mobile->available();
+            $data['mobileUserActivity'] = $data['mobileAvailable']
+                ? $this->mobile->userActivity((int)($_GET['id'] ?? 0))
+                : null;
         } elseif ($this->page === 'mobile-post') {
             $data['mobileAvailable'] = $this->mobile->available();
             $data['mobileCounts'] = $this->mobile->counts();
             $data['mobilePost'] = $data['mobileAvailable']
-                ? $this->mobile->post((int)($_GET['id'] ?? 0))
+                ? $this->mobile->post((int)($_GET['id'] ?? 0), ($_GET['archive'] ?? '') === '1')
                 : null;
         }
         return $data;
     }
 
+    /** Builds the post feed and filter values for the current request. */
     private function feedData(): array
     {
         $status = (string)($_GET['status'] ?? '');
@@ -633,7 +806,7 @@ final class PageController
         $config = [
             'home' => ['Home', 'Approved posts from your moderated feed.', 'home'],
             'posts' => ['Posts', 'Every post in the moderation feed. Filter by status.', 'posts'],
-            'control' => ['Control Posts/Feed', 'Pin or remove posts in the feed. Pending posts have to be checked in the queue first.', 'control'],
+            'control' => ['Control Feed', 'Pin or remove posts in the feed. Pending posts have to be checked in the queue first.', 'control'],
             'reported' => ['Reported', 'Posts that members reported. Review pending ones in the reported queue.', 'reported'],
         ];
         $title = $config[$this->page][0] ?? 'Search';
@@ -663,6 +836,7 @@ final class PageController
         ];
     }
 
+    /** Adds display names or other view-ready fields to a post list. */
     private function named(array $posts): array
     {
         foreach ($posts as &$post) {
@@ -672,6 +846,7 @@ final class PageController
         return $posts;
     }
 
+    /** Creates the hidden form field used to verify a request token. */
     private function csrfField(): string
     {
         if (!isset($_SESSION['csrf_token'])) {
@@ -680,11 +855,13 @@ final class PageController
         return '<input type="hidden" name="csrf_token" value="' . h($_SESSION['csrf_token']) . '">';
     }
 
+    /** Saves a message to display after the next page load. */
     private function flash(string $message, string $type = 'success'): void
     {
         $_SESSION['flash'] = ['message' => $message, 'type' => $type];
     }
 
+    /** Builds a safe same-site URL for returning to the current page. */
     private function returnUrl(): string
     {
         $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
@@ -694,6 +871,7 @@ final class PageController
         return $this->page . '.php';
     }
 
+    /** Returns a validated local referrer or a default dashboard page. */
     private function safeReferrer(): string
     {
         $referrer = (string)($_SERVER['HTTP_REFERER'] ?? '');
@@ -710,6 +888,7 @@ final class PageController
         return 'posts.php';
     }
 
+    /** Sends a redirect response and stops processing the current request. */
     private function redirect(string $location): never
     {
         header('Location: ' . $location);

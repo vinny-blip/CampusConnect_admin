@@ -9,11 +9,13 @@ final class PostModel extends StateModel
     private const REPORT_REASONS = [
         'Non-academic content', 'Toxic or harassing content', 'Plagiarized content', 'Other guideline violation',
     ];
+    /** Loads all posts saved for the current dashboard account. */
     private function all(): array
     {
         return $this->load(self::POSTS, static fn() => []);
     }
 
+    /** Adds a moderator action to the recent activity history. */
     private function log(string $moderator, string $action, array $post): void
     {
         $entries = $this->load(self::LOG, static fn() => []);
@@ -27,6 +29,7 @@ final class PostModel extends StateModel
         $this->save(self::LOG, array_slice($entries, 0, 30));
     }
 
+    /** Applies a change to one post and saves the updated post list. */
     private function update(int $id, callable $change): bool
     {
         $posts = $this->all();
@@ -42,6 +45,7 @@ final class PostModel extends StateModel
         return false;
     }
 
+    /** Fills in normalized flags and counts for a post and its comments. */
     private function enrich(array $post): array
     {
         $post['reported'] = (bool)($post['reported'] ?? false);
@@ -86,6 +90,7 @@ final class PostModel extends StateModel
         return $post;
     }
 
+    /** Finds one post by ID and returns its normalized data. */
     public function get(int $id): ?array
     {
         foreach ($this->all() as $post) {
@@ -96,6 +101,7 @@ final class PostModel extends StateModel
         return null;
     }
 
+    /** Searches and sorts posts using the supplied status and content filters. */
     public function find(?string $status = null, ?string $community = null, string $query = '', ?bool $reported = null, string $sort = 'new'): array
     {
         $query = mb_strtolower(trim($query));
@@ -133,6 +139,7 @@ final class PostModel extends StateModel
         return array_map(fn($post) => $this->enrich($post), array_values($posts));
     }
 
+    /** Returns posts for a reported, AI-review, or pending moderation queue. */
     public function queue(string $kind, string $query = ''): array
     {
         if ($kind === 'reported') {
@@ -156,16 +163,19 @@ final class PostModel extends StateModel
         return array_map(fn($post) => $this->enrich($post), array_values($posts));
     }
 
+    /** Lists reported comments matching the search text. */
     public function reportedComments(string $query = ''): array
     {
         return $this->commentQueueItems($query, false);
     }
 
+    /** Lists comments awaiting AI moderation review. */
     public function aiReviewComments(string $query = ''): array
     {
         return $this->commentQueueItems($query, true);
     }
 
+    /** Builds a filtered comment queue for reports or AI review. */
     private function commentQueueItems(string $query, bool $aiReviewOnly): array
     {
         $query = mb_strtolower(trim($query));
@@ -207,6 +217,7 @@ final class PostModel extends StateModel
         return $comments;
     }
 
+    /** Counts report activity by day across the requested date range. */
     public function reportCountsByDate(int $days = 14): array
     {
         $days = max(1, min(90, $days));
@@ -225,6 +236,7 @@ final class PostModel extends StateModel
         return $results;
     }
 
+    /** Adds a report timestamp to the saved report history. */
     private function recordReport(int $timestamp): void
     {
         $history = $this->load(self::REPORT_HISTORY, static fn() => []);
@@ -233,6 +245,7 @@ final class PostModel extends StateModel
         $this->save(self::REPORT_HISTORY, $history);
     }
 
+    /** Returns frequently used topics from recent posts. */
     public function trendingTopics(int $limit = 5): array
     {
         $todayStart = (int)strtotime('today') * 1000;
@@ -274,6 +287,7 @@ final class PostModel extends StateModel
         return array_slice($topics, 0, max(0, $limit));
     }
 
+    /** Lists today's most-liked posts. */
     public function topLikedToday(int $limit = 5): array
     {
         $todayStart = (int)strtotime('today') * 1000;
@@ -289,6 +303,7 @@ final class PostModel extends StateModel
         );
     }
 
+    /** Counts posts in the dashboard's main moderation categories. */
     public function counts(): array
     {
         $posts = $this->all();
@@ -319,6 +334,7 @@ final class PostModel extends StateModel
         return $counts;
     }
 
+    /** Marks a post as reviewed by the dashboard moderator. */
     public function markReviewed(int $id): void
     {
         $this->update($id, static function (&$post): void {
@@ -328,6 +344,7 @@ final class PostModel extends StateModel
         });
     }
 
+    /** Changes a post's moderation status and records the action. */
     public function setStatus(int $id, string $status, string $moderator): array
     {
         $posts = $this->all();
@@ -361,6 +378,7 @@ final class PostModel extends StateModel
         return ['error' => 'Post not found.'];
     }
 
+    /** Marks a post as reported with the selected reason. */
     public function reportPost(int $id, string $reason): array
     {
         if (!in_array($reason, self::REPORT_REASONS, true)) {
@@ -387,6 +405,7 @@ final class PostModel extends StateModel
         return [];
     }
 
+    /** Clears the report flag and reason from a post. */
     public function clearPostReport(int $id): bool
     {
         $cleared = false;
@@ -399,6 +418,7 @@ final class PostModel extends StateModel
         return $cleared;
     }
 
+    /** Removes a post and records who performed the removal. */
     public function deletePost(int $id, string $moderator): bool
     {
         $posts = $this->all();
@@ -417,6 +437,7 @@ final class PostModel extends StateModel
         return false;
     }
 
+    /** Updates a post's title, body, and tags. */
     public function updatePost(int $id, string $title, string $body, string $tags): array
     {
         $title = trim($title);
@@ -453,6 +474,7 @@ final class PostModel extends StateModel
         return $updated ? [] : ['error' => 'Post not found.'];
     }
 
+    /** Toggles whether comments on a post are locked. */
     public function toggleLock(int $id): ?bool
     {
         $locked = null;
@@ -463,6 +485,7 @@ final class PostModel extends StateModel
         return $locked;
     }
 
+    /** Restores a removed post and records who restored it. */
     public function restore(int $id, string $moderator): void
     {
         $found = null;
@@ -477,6 +500,7 @@ final class PostModel extends StateModel
         }
     }
 
+    /** Toggles the current user's like on a post. */
     public function toggleLike(int $id): void
     {
         $this->update($id, static function (&$post): void {
@@ -488,6 +512,7 @@ final class PostModel extends StateModel
         });
     }
 
+    /** Toggles whether a post is pinned to the top of its feed. */
     public function togglePin(int $id): void
     {
         $this->update($id, static function (&$post): void {
@@ -497,6 +522,7 @@ final class PostModel extends StateModel
         });
     }
 
+    /** Adds a comment and saves any supplied AI moderation result. */
     public function addComment(int $postId, string $author, string $text, ?array $aiReview = null): bool
     {
         $text = trim($text);
@@ -530,6 +556,7 @@ final class PostModel extends StateModel
         return $added;
     }
 
+    /** Approves a comment that was waiting for AI review. */
     public function approveAiComment(int $postId, int $commentId): bool
     {
         $approved = false;
@@ -549,6 +576,7 @@ final class PostModel extends StateModel
         return $approved;
     }
 
+    /** Checks whether a comment still needs AI moderation review. */
     public function commentNeedsAiReview(int $postId, int $commentId): bool
     {
         $post = $this->get($postId);
@@ -563,6 +591,7 @@ final class PostModel extends StateModel
         return false;
     }
 
+    /** Marks a comment as reported with the selected reason. */
     public function reportComment(int $postId, int $commentId, string $reason): array
     {
         if (!in_array($reason, self::REPORT_REASONS, true)) {
@@ -593,6 +622,7 @@ final class PostModel extends StateModel
         return [];
     }
 
+    /** Clears the report flag and reason from a comment. */
     public function clearCommentReport(int $postId, int $commentId): bool
     {
         $cleared = false;
@@ -611,6 +641,7 @@ final class PostModel extends StateModel
         return $cleared;
     }
 
+    /** Hides or unhides a comment without deleting it. */
     public function hideComment(int $postId, int $commentId, bool $hidden = true): bool
     {
         $updated = false;
@@ -634,6 +665,7 @@ final class PostModel extends StateModel
         return $updated;
     }
 
+    /** Removes a comment from its post. */
     public function removeComment(int $postId, int $commentId): void
     {
         $this->update($postId, static function (&$post) use ($commentId): void {
@@ -644,6 +676,7 @@ final class PostModel extends StateModel
         });
     }
 
+    /** Adds or removes the current user's reaction to a comment. */
     public function reactComment(int $postId, int $commentId, string $reaction): void
     {
         if (!in_array($reaction, ['likes', 'hearts'], true)) {
@@ -660,6 +693,7 @@ final class PostModel extends StateModel
         });
     }
 
+    /** Collects visible comments for the dashboard comment list. */
     public function comments(): array
     {
         $comments = [];
@@ -685,6 +719,7 @@ final class PostModel extends StateModel
         return $comments;
     }
 
+    /** Creates a post and attaches its author, communities, and AI review data. */
     public function add(array $data, string $author, array $communitySlugs, ?array $aiReview = null): array
     {
         $community = trim((string)($data['community'] ?? ''));
@@ -749,6 +784,7 @@ final class PostModel extends StateModel
         return ['id' => $id];
     }
 
+    /** Returns the latest moderator actions for the dashboard activity panel. */
     public function activity(int $limit = 8): array
     {
         return array_slice($this->load(self::LOG, static fn() => []), 0, $limit);
