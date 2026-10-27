@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 // Load a private project .env file when the server has not supplied a value.
 $envFile = dirname(__DIR__) . '/.env';
+
 $localEnvironment = [];
 if (is_file($envFile)) {
     $parsedEnvironment = parse_ini_file($envFile, false, INI_SCANNER_RAW);

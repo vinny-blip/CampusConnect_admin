@@ -3,14 +3,19 @@ declare(strict_types=1);
 
 final class PageController
 {
-    private ?PDO $db = null;
-    private ?UserModel $users = null;
+    private const MOBILE_ACTION_PAGES = [
+        'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
+        'home', 'posts', 'control', 'reported', 'comments', 'removed', 'users',
+    ];
+
+    private PDO $db;
+    private UserModel $users;
     private ?MobileLoginLogModel $mobileLoginLogs = null;
     private ?array $user = null;
-    private ?PostModel $posts = null;
-    private ?NotificationModel $notifications = null;
-    private ?RestrictedModel $restricted = null;
-    private ?AiModerationModel $aiModeration = null;
+    private PostModel $posts;
+    private NotificationModel $notifications;
+    private RestrictedModel $restricted;
+    private AiModerationModel $aiModeration;
     private ?MobileModerationModel $mobile = null;
     private string $page;
 
@@ -49,10 +54,10 @@ final class PageController
     /** Authenticates the request, handles actions, and renders the page. */
     public function run(): void
     {
-        $this->user = $this->users !== null && isset($_SESSION['user_id'])
+        $this->user = isset($_SESSION['user_id'])
             ? $this->users->findById((int)$_SESSION['user_id'])
             : null;
-        if ($this->users !== null && isset($_SESSION['user_id']) && $this->user === null) {
+        if (isset($_SESSION['user_id']) && $this->user === null) {
             unset($_SESSION['user_id']);
         }
 
@@ -148,7 +153,6 @@ final class PageController
     }
 
     /** Creates the login-log model only when the Logs page needs it. */
-    /** Creates the login-log model only when the Logs page needs it. */
     private function mobileLoginLogs(): MobileLoginLogModel
     {
         if ($this->mobileLoginLogs === null) {
@@ -160,7 +164,7 @@ final class PageController
     /** Adds notifications for newly AI-flagged mobile posts and comments. */
     private function syncAiFlaggedPostNotifications(): void
     {
-        if ($this->mobile === null || $this->notifications === null || !$this->mobile->available()) {
+        if ($this->mobile === null || !$this->mobile->available()) {
             return;
         }
         $notifications = [];
@@ -238,28 +242,30 @@ final class PageController
             $this->redirect('login.php');
         }
 
-        $allowedActions = match ($this->page) {
-            'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
-            'home', 'posts', 'control', 'reported', 'comments', 'removed', 'users'
-                => ['mobile-approve', 'mobile-remove', 'mobile-restore-post', 'mobile-restore-comment-archive', 'mobile-delete-comment', 'mobile-hide-comment', 'mobile-restore-comment', 'mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user', 'mobile-dismiss-report', 'mobile-restore-report', 'toggle-ai-moderation'],
-            'home', 'posts', 'control', 'reported', 'search'
-                => ['like', 'pin', 'restore', 'remove', 'mobile-dismiss-report'],
-            'post' => [
+        $allowedActions = match (true) {
+            in_array($this->page, self::MOBILE_ACTION_PAGES, true) => [
+                'mobile-approve', 'mobile-remove', 'mobile-restore-post',
+                'mobile-restore-comment-archive', 'mobile-delete-comment',
+                'mobile-hide-comment', 'mobile-restore-comment',
+                'mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user',
+                'mobile-dismiss-report', 'mobile-restore-report', 'toggle-ai-moderation',
+            ],
+            $this->page === 'search' => ['like', 'pin', 'restore', 'remove', 'mobile-dismiss-report'],
+            $this->page === 'post' => [
                 'approve', 'remove', 'like-comment', 'heart-comment', 'comment',
                 'clear-post-report', 'clear-comment-report',
                 'delete-comment', 'hide-comment', 'restore-comment', 'delete-post', 'edit-post', 'toggle-lock',
             ],
-            'notifications' => ['read-all'],
-            'profile' => ['update-name', 'update-profile-picture', 'change-password'],
-            'restricted' => ['restrict', 'unrestrict'],
-            'comments' => ['delete-comment', 'clear-comment-report', 'hide-comment', 'restore-comment'],
+            $this->page === 'notifications' => ['read-all'],
+            $this->page === 'profile' => ['update-name', 'update-profile-picture', 'change-password'],
+            $this->page === 'restricted' => ['restrict', 'unrestrict'],
             default => [],
         };
         if (!in_array($action, $allowedActions, true)) {
             http_response_code(400);
             exit('Unsupported form action.');
         }
-        if (str_starts_with($this->page, 'mobile-') || in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments', 'removed', 'users'], true)) {
+        if (in_array($this->page, self::MOBILE_ACTION_PAGES, true)) {
             if ($action === 'toggle-ai-moderation') {
                 $this->aiModeration->setEnabled((string)($_POST['enabled'] ?? '0') === '1');
                 $this->flash('AI Moderation setting updated.');
@@ -350,7 +356,7 @@ final class PageController
             $post = $this->posts->get($postId);
             $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
         }
-        if (in_array($action, ['approve-ai-comment', 'delete-comment', 'hide-comment', 'restore-comment'], true)) {
+        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
             $this->requireAdminForAiReview(
                 $this->posts->commentNeedsAiReview($postId, (int)($_POST['comment_id'] ?? 0))
             );
@@ -384,9 +390,6 @@ final class PageController
                 break;
             case 'restricted':
                 $this->handleRestrictedAction($action);
-                break;
-            case 'comments':
-                $this->handleCommentAction($action);
                 break;
         }
         $this->redirect($this->returnUrl());
@@ -423,13 +426,6 @@ final class PageController
     {
         $id = (int)($_GET['id'] ?? $_POST['post_id'] ?? 0);
         $commentId = (int)($_POST['comment_id'] ?? 0);
-        if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {
-            $post = $this->posts->get($id);
-            $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
-        }
-        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
-            $this->requireAdminForAiReview($this->posts->commentNeedsAiReview($id, $commentId));
-        }
         if ($action === 'approve' || $action === 'remove') {
             $result = $this->posts->setStatus($id, $action === 'approve' ? 'approved' : 'removed', $this->user['name']);
             $this->flash($result['error'] ?? ($action === 'approve' ? 'Post approved.' : 'Post removed.'), isset($result['error']) ? 'error' : 'success');
@@ -486,29 +482,6 @@ final class PageController
             } elseif (isset($_GET['reply'])) {
                 $this->redirect('post.php?id=' . $id . (isset($_GET['review']) ? '&review=1' : ''));
             }
-        }
-    }
-
-    /** Performs the selected moderation action on a comment. */
-    private function handleCommentAction(string $action): void
-    {
-        $postId = (int)($_POST['post_id'] ?? 0);
-        $commentId = (int)($_POST['comment_id'] ?? 0);
-        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
-            $this->requireAdminForAiReview($this->posts->commentNeedsAiReview($postId, $commentId));
-        }
-        if ($action === 'delete-comment') {
-            $this->posts->removeComment($postId, $commentId);
-            $this->flash('Comment removed.');
-        } elseif ($action === 'hide-comment' || $action === 'restore-comment') {
-            $hidden = $action === 'hide-comment';
-            $updated = !$hidden && $this->posts->commentNeedsAiReview($postId, $commentId)
-                ? $this->posts->approveAiComment($postId, $commentId)
-                : $this->posts->hideComment($postId, $commentId, $hidden);
-            $this->flash(!$updated ? 'Comment not found.' : ($hidden ? 'Comment hidden.' : 'Comment restored.'), $updated ? 'success' : 'error');
-        } elseif ($action === 'clear-comment-report') {
-            $cleared = $this->posts->clearCommentReport($postId, $commentId);
-            $this->flash($cleared ? 'Comment report dismissed.' : 'Comment report was already cleared.', $cleared ? 'success' : 'error');
         }
     }
 
@@ -650,200 +623,30 @@ final class PageController
         }
     }
 
-    /** Gathers the data required to render the current dashboard page. */
+    /** Builds view data with the page-specific data builder. */
     private function pageData(): array
     {
         if (in_array($this->page, ['login', 'register'], true)) {
             return [];
         }
-        $data = [
-            'user' => $this->user,
-            'noteCount' => $this->notifications->unread(),
-        ];
-        if (in_array($this->page, ['home', 'posts', 'control', 'reported', 'comments', 'removed', 'users', 'mobile-reports'], true)) {
-            $data['mobileAvailable'] = $this->mobile->available();
-            $data['mobileCounts'] = $this->mobile->counts();
-            $data['mobileCommentCounts'] = $this->page === 'comments' ? $this->mobile->commentCounts() : [];
-            $data['mobileQuery'] = trim((string)($_GET['q'] ?? ''));
-            $data['mobileStatus'] = $this->page === 'home'
-                ? 'approved'
-                : ($this->page === 'reported' ? 'pending' : (string)($_GET['status'] ?? ''));
-            $data['mobilePosts'] = in_array($this->page, ['comments', 'reported', 'removed', 'mobile-reports'], true)
-                ? []
-                : $this->mobile->posts($data['mobileStatus'], $data['mobileQuery']);
-            if ($this->page === 'home') {
-                $data['mobilePosts'] = array_values(array_filter(
-                    $data['mobilePosts'],
-                    static fn(array $post): bool => empty($post['ai_flagged'])
-                ));
-            }
-            $reportViews = ['current', 'dismissed', 'dismissed-comments', 'removed-posts', 'removed-comments'];
-            $legacyReportStatus = (string)($_GET['status'] ?? 'pending');
-            $legacyReportView = $legacyReportStatus === 'pending' ? 'current' : $legacyReportStatus;
-            $requestedReportView = (string)($_GET['view'] ?? $legacyReportView);
-            $data['mobileReportView'] = in_array($requestedReportView, $reportViews, true)
-                ? $requestedReportView
-                : 'current';
-            $data['mobileRemovedType'] = $this->page === 'removed'
-                ? (($_GET['type'] ?? 'posts') === 'comments' ? 'comments' : 'posts')
-                : ($data['mobileReportView'] === 'removed-comments' ? 'comments' : 'posts');
-            $showRemovedPosts = $this->page === 'removed'
-                ? $data['mobileRemovedType'] === 'posts'
-                : in_array($this->page, ['reported', 'mobile-reports'], true) && $data['mobileReportView'] === 'removed-posts';
-            $showRemovedComments = $this->page === 'removed'
-                ? $data['mobileRemovedType'] === 'comments'
-                : in_array($this->page, ['reported', 'mobile-reports'], true) && $data['mobileReportView'] === 'removed-comments';
-            $data['mobileRemovedPosts'] = $showRemovedPosts
-                ? $this->mobile->removedPosts($data['mobileQuery'])
-                : [];
-            $data['mobileRemovedComments'] = $showRemovedComments
-                ? $this->mobile->removedComments($data['mobileQuery'])
-                : [];
-            $data['mobileDismissedComments'] = in_array($this->page, ['reported', 'mobile-reports'], true)
-                    && $data['mobileReportView'] === 'dismissed-comments'
-                ? $this->mobile->dismissedComments($data['mobileQuery'])
-                : [];
-            if ($this->page === 'users') {
-                $data['mobilePosts'] = [];
-            }
-            $data['mobileComments'] = $this->page === 'comments'
-                ? $this->mobile->comments($data['mobileQuery'])
-                : [];
-            $data['mobileUsers'] = in_array($this->page, ['home', 'users'], true)
-                ? $this->mobile->users($this->page === 'users' ? $data['mobileQuery'] : '')
-                : [];
-            $data['mobileUserFilter'] = in_array($_GET['status'] ?? '', ['active', 'suspended', 'banned'], true) ? (string)$_GET['status'] : '';
-            $statusCounts = array_count_values(array_column($data['mobileUsers'], 'moderation_status'));
-            $data['mobileUserCounts'] = [
-                'total' => count($data['mobileUsers']),
-                'suspended' => $statusCounts['suspended'] ?? 0,
-                'banned' => $statusCounts['banned'] ?? 0,
-            ];
-            if ($this->page === 'users' && $data['mobileUserFilter'] !== '') {
-                $data['mobileUsers'] = array_values(array_filter(
-                    $data['mobileUsers'],
-                    fn($u) => $u['moderation_status'] === $data['mobileUserFilter']
-                ));
-            }
-            $reportStatus = $data['mobileReportView'] === 'current'
-                ? 'pending'
-                : $data['mobileReportView'];
-            $data['mobileReports'] = in_array($this->page, ['reported', 'mobile-reports'], true)
-                    && in_array($data['mobileReportView'], ['current', 'reviewed', 'resolved', 'dismissed'], true)
-                ? $this->mobile->reports($reportStatus, $data['mobileQuery'])
-                : [];
-            $data['mobileReportStatus'] = $reportStatus;
-            $data['aiModerationEnabled'] = $this->aiModeration->enabled();
-            $data['aiModerationConfigured'] = $this->aiModeration->configured();
-            $reportRange = (string)($_GET['report_range'] ?? '7');
-            $reportDays = in_array($reportRange, ['7', '30', '365'], true) ? (int)$reportRange : 7;
-            $data['reportRange'] = $reportDays;
-            $data['reportCountsByDate'] = $this->page === 'home'
-                ? $this->mobile->reportCountsByDate($reportDays)
-                : [];
-        } elseif ($this->page === 'post') {
-            $id = (int)($_GET['id'] ?? 0);
-            $data['post'] = $this->posts->get($id);
-            if ($data['post'] !== null) {
-                $data['post']['cname'] = (string)$data['post']['community'];
-            }
-            $data['back'] = isset($_GET['review']) ? 'control.php?status=pending' : $this->safeReferrer();
-            $data['replyTo'] = trim((string)($_GET['reply'] ?? ''));
-        } elseif ($this->page === 'overview') {
-            $data['counts'] = $this->mobile->counts();
-            $data['counts']['toApprove'] = $data['counts']['pending'];
-            $data['activity'] = [];
-            $reportRange = (string)($_GET['report_range'] ?? '7');
-            $reportDays = in_array($reportRange, ['7', '30', '365'], true) ? (int)$reportRange : 7;
-            $data['reportRange'] = $reportDays;
-            $data['reportCountsByDate'] = $this->mobile->reportCountsByDate($reportDays);
-        } elseif ($this->page === 'notifications') {
-            $data['notifications'] = $this->notifications->list();
-        } elseif ($this->page === 'logs') {
-            // Supply the initial values before the browser starts polling.
-            $data['activeUserCount'] = $this->mobileLoginLogs()->activeUserCount();
-            $data['loginSessions'] = $this->mobileLoginLogs()->recentSessions();
-        } elseif ($this->page === 'restricted') {
-            $data['restrictedUsers'] = $this->restricted->list();
-        } elseif ($this->page === 'comments') {
-            $data['comments'] = $this->posts->comments();
-        } elseif (in_array($this->page, ['mobile-feed', 'mobile-queues', 'mobile-comments'], true)) {
-            $data['mobileAvailable'] = $this->mobile->available();
-            $data['mobileCounts'] = $this->mobile->counts();
-            $query = trim((string)($_GET['q'] ?? ''));
-            $data['mobileQuery'] = $query;
-            if ($this->page === 'mobile-comments') {
-                $data['mobileComments'] = $this->mobile->comments($query);
-            } else {
-                $status = $this->page === 'mobile-queues' ? (string)($_GET['status'] ?? 'pending') : (string)($_GET['status'] ?? '');
-                $data['mobilePosts'] = $this->mobile->posts($status, $query);
-                $data['mobileStatus'] = $status;
-            }
-        } elseif ($this->page === 'user') {
-            $data['mobileAvailable'] = $this->mobile->available();
-            $data['mobileUserActivity'] = $data['mobileAvailable']
-                ? $this->mobile->userActivity((int)($_GET['id'] ?? 0))
-                : null;
-        } elseif ($this->page === 'mobile-post') {
-            $data['mobileAvailable'] = $this->mobile->available();
-            $data['mobileCounts'] = $this->mobile->counts();
-            $data['mobilePost'] = $data['mobileAvailable']
-                ? $this->mobile->post((int)($_GET['id'] ?? 0), ($_GET['archive'] ?? '') === '1')
-                : null;
+        if ($this->mobile === null) {
+            throw new LogicException('Dashboard models were not initialized for this request.');
         }
-        return $data;
-    }
 
-    /** Builds the post feed and filter values for the current request. */
-    private function feedData(): array
-    {
-        $status = (string)($_GET['status'] ?? '');
-        if (!in_array($status, ['pending', 'approved', 'removed'], true)) {
-            $status = '';
-        }
-        $query = trim((string)($_GET['q'] ?? ''));
-        $slug = trim((string)($_GET['c'] ?? ''));
-        $config = [
-            'home' => ['Home', 'Approved posts from your moderated feed.', 'home'],
-            'posts' => ['Posts', 'Every post in the moderation feed. Filter by status.', 'posts'],
-            'control' => ['Control Feed', 'Pin or remove posts in the feed. Pending posts have to be checked in the queue first.', 'control'],
-            'reported' => ['Reported', 'Posts that members reported. Review pending ones in the reported queue.', 'reported'],
-        ];
-        $title = $config[$this->page][0] ?? 'Search';
-        $sub = $config[$this->page][1] ?? '';
-        $posts = [];
-
-        if ($this->page === 'home') {
-            $posts = $this->posts->find('approved', null, '', null, 'hot');
-        } elseif ($this->page === 'posts' || $this->page === 'control') {
-            $posts = $this->posts->find($status ?: null);
-        } elseif ($this->page === 'reported') {
-            $posts = $this->posts->find(null, null, '', true);
-        } elseif ($this->page === 'search') {
-            $posts = $this->posts->find(null, null, $query);
-            $title = $query !== '' ? 'Results for “' . $query . '”' : 'Search';
-            $sub = $query !== '' ? count($posts) . ' posts found.' : 'Type something in the search bar above.';
-        }
-        return [
-            'feedTitle' => $title,
-            'feedSub' => $sub,
-            'filter' => $status ?: 'all',
-            'feedPosts' => $this->named($posts),
-            'query' => $query,
-            'mode' => $this->page,
-            'topLikedToday' => $this->page === 'home' ? $this->posts->topLikedToday() : [],
-            'reportCountsByDate' => $this->page === 'home' ? $this->posts->reportCountsByDate(7) : [],
-        ];
-    }
-
-    /** Adds display names or other view-ready fields to a post list. */
-    private function named(array $posts): array
-    {
-        foreach ($posts as &$post) {
-            $post['cname'] = (string)$post['community'];
-        }
-        unset($post);
-        return $posts;
+        return (new PageDataBuilder(
+            $this->page,
+            $this->posts,
+            $this->notifications,
+            $this->restricted,
+            $this->aiModeration,
+            $this->mobile,
+            $this->db
+        ))->build(
+            $this->user,
+            $_GET,
+            (string)($_SERVER['HTTP_HOST'] ?? ''),
+            (string)($_SERVER['HTTP_REFERER'] ?? '')
+        );
     }
 
     /** Creates the hidden form field used to verify a request token. */
@@ -869,23 +672,6 @@ final class PageController
             return $uri;
         }
         return $this->page . '.php';
-    }
-
-    /** Returns a validated local referrer or a default dashboard page. */
-    private function safeReferrer(): string
-    {
-        $referrer = (string)($_SERVER['HTTP_REFERER'] ?? '');
-        $parts = parse_url($referrer);
-        $requestHost = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
-        $host = strtolower((string)parse_url('http://' . $requestHost, PHP_URL_HOST));
-        $referrerHost = strtolower((string)($parts['host'] ?? $host));
-        $filename = isset($parts['path']) ? basename($parts['path']) : '';
-        $query = (string)($parts['query'] ?? '');
-        if ($host !== '' && $referrerHost === $host && preg_match('/^[a-z]+\.php$/', $filename)
-            && preg_match('/^[a-zA-Z0-9_=&%-]*$/', $query)) {
-            return $filename . ($query === '' ? '' : '?' . $query);
-        }
-        return 'posts.php';
     }
 
     /** Sends a redirect response and stops processing the current request. */
