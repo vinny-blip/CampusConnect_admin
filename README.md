@@ -45,8 +45,14 @@ configuration files.
    web access by `.htaccess`. The mobile backend can read this same file when
    it is deployed beside the dashboard in the expected folder structure; if
    the mobile backend is deployed separately, create the same server-only
-   file at `backend_setup/config/openai.local.php`. Never put the real key in
-   Git, JavaScript, or a public file.
+   file at `backend_setup/config/openai.local.php`. Existing deployments may
+   also use `backend_setup/openai.local.php`. Never put the real key in Git,
+   JavaScript, or a public file. If moderation is unavailable, the mobile
+   backend writes a reason and (for API responses) the HTTP status to
+   Hostinger's PHP error log under `[CampusConnect mobile AI moderation]`.
+   Check that log after reproducing the issue; HTTP 401 indicates key
+   authentication, HTTP 403 indicates access/permission, and HTTP 429 indicates
+   rate or quota limits. The log does not include the API key or submitted text.
 6. Visit the domain and register accounts before using the dashboard. Set the
    `role` column to `admin` in phpMyAdmin for each administrator account.
 
@@ -77,8 +83,10 @@ The Mobile data pages read the shared `mobile_users`, `mobile_posts`, and
 `mobile_comments` tables directly. Admin-owned moderation state is stored in
 `admin_mobile_post_moderation`, `admin_mobile_comment_moderation`, and
 `admin_mobile_user_moderation`; it is linked by the mobile record IDs and does
-not copy mobile content into `admin_app_state`. The mobile schema must exist in
-the same Hostinger database for those pages to display data.
+not copy mobile content into `admin_app_state`. Mobile comment reports are
+stored in `mobile_comment_reports` and appear in the web Reported page. The
+mobile schema must exist in the same Hostinger database for those pages to
+display data.
 
 ## Pages
 
@@ -91,7 +99,7 @@ the same Hostinger database for those pages to display data.
 | About Us | `about.php` |
 | FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
-| Overview, Posts, Comments, Restricted, Reported | `overview.php`, `posts.php`, `comments.php`, `restricted.php`, `reported.php` |
+| Overview, Posts, Comments, Restricted, Reported, Removed, Dismissed | `overview.php`, `posts.php`, `comments.php`, `restricted.php`, `reported.php`, `removed.php`, `dismissed.php` |
 | Notifications, Profile, Search | `notifications.php`, `profile.php`, `search.php` |
 | Home, Posts, Reported, Comments | `home.php`, `posts.php`, `reported.php`, `comments.php` |
 | Mobile app login session history | `logs.php` |
@@ -100,9 +108,12 @@ Mobile app login logs record successful mobile-app sign-ins and explicit
 sign-outs. The active-user count uses a five-minute activity window refreshed
 by a heartbeat while the mobile app is in the foreground. App closures and
 connection losses cannot send a reliable logout event, so those logout times
-are estimated. To capture sessions, deploy the updated mobile `login.php`,
-`mobile_session_heartbeat.php`, and `mobile_session_logout.php` backend files,
-then build and distribute the updated Android app. The dashboard creates the
+are marked Timed Out. Suspended or banned users are signed out on the next
+foreground heartbeat (within about 15 seconds) and shown a restriction message.
+The heartbeat checks both new token-based sessions and existing app sessions
+that only have a saved user ID. Deploy the updated mobile
+`mobile_session_heartbeat.php` backend file, then build and distribute the
+updated Android app. The dashboard creates the
 shared session-log table automatically; importing `CampusConnect/backend_setup/campusconnect_db.sql`
 also includes its schema.
 
@@ -120,6 +131,17 @@ web admin reads those report records directly and displays pending reports in
 reason, optional comments, status, and timestamp. A moderator can dismiss a
 pending report from the web page; this updates that report's `status` without
 deleting the mobile post.
+
+Reports submitted for comments appear in **Mobile data → Reported** under
+Current reports, including the comment, its author, the reporter,
+reason, and optional details. A moderator can remove the reported comment or
+dismiss the report without removing the comment.
+Dismissed post and comment reports appear on the **Dismissed** page beside
+**Removed** and can be restored to Current reports.
+Removed comments are archived and available at **Mobile data → Removed** by
+selecting **Comments**. Removing a comment from a report opens that archive.
+The web Comments list reads the same `mobile_comments` records as the app, so
+user edits and deletions are reflected there.
 
 Suspending a mobile user requires a lift date and time in the moderator's local
 time zone. New deadlines are stored in UTC to avoid differences between the

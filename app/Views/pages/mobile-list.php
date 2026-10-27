@@ -1,6 +1,7 @@
 <?php
 $isComments = in_array($page, ['comments', 'mobile-comments'], true);
-$isReports = in_array($page, ['reported', 'mobile-reports'], true);
+$isReports = in_array($page, ['reported', 'dismissed', 'mobile-reports'], true);
+$isDismissedPage = $page === 'dismissed';
 $isUsers = $page === 'users';
 $isRemoved = $page === 'removed';
 $isMobileStandalone = str_starts_with($page, 'mobile-');
@@ -9,8 +10,10 @@ $isRemovedPostsView = ($isRemoved && $mobileRemovedType === 'posts')
 $isRemovedCommentsView = ($isRemoved && $mobileRemovedType === 'comments')
   || ($isReports && $mobileReportView === 'removed-comments');
 $isDismissedCommentsView = $isReports && $mobileReportView === 'dismissed-comments';
-$isReportArchiveView = $isReports && ($isRemovedPostsView || $isRemovedCommentsView || $isDismissedCommentsView);
-$heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal History' : ($isRemoved ? 'Removed' : ($isComments ? 'Comments' : ($isReports ? 'Reported' : ($page === 'home' ? 'Home' : 'Posts')))));
+$showDismissedCommentReports = $isDismissedPage || $isDismissedCommentsView;
+$splitReportColumns = ($page === 'reported' && $mobileReportView === 'current') || $isDismissedPage;
+$isReportArchiveView = !$isDismissedPage && $isReports && ($isRemovedPostsView || $isRemovedCommentsView || $isDismissedCommentsView);
+$heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal History' : ($isRemoved ? 'Removed' : ($isDismissedPage ? 'Dismissed' : ($isComments ? 'Comments' : ($isReports ? 'Reported' : ($page === 'home' ? 'Overview' : 'Posts'))))));
 ?>
 <?php $showAiToggle = in_array($page, ['control', 'posts', 'comments'], true); ?>
 <?php if ($showAiToggle): ?><div class="moderation-page-header"><?php endif; ?>
@@ -48,7 +51,7 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     <span class="stat"><b><?= (int)$mobileCommentCounts['reported'] ?></b>Reported</span>
     <span class="stat"><b><?= (int)$mobileCommentCounts['flagged'] ?></b>Flagged</span>
   </div>
-  <?php elseif (!$isRemoved && !$isReportArchiveView): ?>
+  <?php elseif (!$isRemoved && !$isDismissedPage && !$isReportArchiveView): ?>
   <div class="stats">
     <a class="stat" href="control.php?status=pending"><b><?= (int)$mobileCounts['pending'] ?></b>Pending</a>
     <a class="stat" href="reported.php"><b><?= (int)$mobileCounts['reported'] ?></b>Reported</a>
@@ -68,15 +71,6 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
         <option value="comments"<?= $mobileRemovedType === 'comments' ? ' selected' : '' ?>>Comments</option>
       </select>
     <?php endif; ?>
-    <?php if ($isReports): ?>
-      <select class="removed-type-select report-view-select" name="view" aria-label="Choose report or removed content view" onchange="this.form.submit()">
-        <option value="current"<?= $mobileReportView === 'current' ? ' selected' : '' ?>>Current reports</option>
-        <option value="dismissed"<?= $mobileReportView === 'dismissed' ? ' selected' : '' ?>>Dismissed reports</option>
-        <option value="dismissed-comments"<?= $mobileReportView === 'dismissed-comments' ? ' selected' : '' ?>>Dismissed comments</option>
-        <option value="removed-posts"<?= $mobileReportView === 'removed-posts' ? ' selected' : '' ?>>Removed posts</option>
-        <option value="removed-comments"<?= $mobileReportView === 'removed-comments' ? ' selected' : '' ?>>Removed comments</option>
-      </select>
-    <?php endif; ?>
     <?php if ($isUsers): ?>
       <select class="removed-type-select" name="status" aria-label="Filter users by account status" onchange="this.form.submit()">
         <option value="">All accounts</option>
@@ -89,6 +83,16 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
   </form>
   <?php if ($isReports): ?>
     <?php if (!$isReportArchiveView): ?>
+    <?php if ($splitReportColumns): ?>
+    <div class="reported-columns">
+      <section class="reported-column" aria-labelledby="reported-posts-heading">
+    <?php endif; ?>
+    <?php if ($page === 'reported' && $mobileReportView === 'current'): ?>
+    <h3<?= $splitReportColumns ? ' id="reported-posts-heading"' : '' ?>>Reported Posts</h3>
+    <?php elseif ($isDismissedPage): ?>
+    <h3 id="reported-posts-heading">Dismissed post reports</h3>
+    <?php endif; ?>
+    <?php if ($splitReportColumns): ?><div class="reported-scroll" aria-label="Post reports"><?php endif; ?>
     <?php foreach ($mobileReports as $report): ?>
       <?php $reportStatus = strtolower((string)$report['status']); ?>
       <article class="report-card">
@@ -133,27 +137,113 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
         <?php endif; ?>
       </article>
     <?php endforeach; ?>
-    <?php if (!$mobileReports): ?><p class="empty">No reports match this view.</p><?php endif; ?>
+    <?php if (!$mobileReports && $isDismissedPage): ?><p class="empty">No dismissed post reports.</p><?php elseif (!$mobileReports && $page === 'reported' && $mobileReportView === 'current'): ?><p class="empty">No reported posts.</p><?php elseif (!$mobileReports && !($mobileReportView === 'current' && $mobileCommentReports)): ?><p class="empty">No reports match this view.</p><?php endif; ?>
+    <?php if ($splitReportColumns): ?></div><?php endif; ?>
+    <?php if ($splitReportColumns): ?>
+      </section>
+      <section class="reported-column" aria-labelledby="reported-comments-heading">
     <?php endif; ?>
-  <?php endif; ?>
-  <?php if ($isDismissedCommentsView): ?>
-    <?php foreach ($mobileDismissedComments as $item): ?>
-      <article class="comment-row">
-        <span class="comment-avatar" aria-hidden="true"><?= h(mb_strtoupper(mb_substr((string)$item['username'], 0, 1))) ?></span>
-        <div class="comment-body">
-          <div class="comment-head">
-            <b><?= h($item['username']) ?></b>
-            <span>commented on</span>
-            <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a>
-            <?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge">AI FLAGGED</span><?php endif; ?>
+    <?php if ($mobileReportView === 'current'): ?>
+    <?php if ($page === 'reported'): ?>
+      <h3<?= $splitReportColumns ? ' id="reported-comments-heading"' : '' ?>>Reported Comments</h3>
+    <?php else: ?>
+      <h3>Reported comments</h3>
+    <?php endif; ?>
+    <?php if ($splitReportColumns && !$isDismissedPage): ?><div class="reported-scroll" aria-label="Comment reports"><?php endif; ?>
+    <?php foreach ($mobileCommentReports as $report): ?>
+      <article class="report-card">
+        <div class="report-card-main">
+          <div class="report-card-heading">
+            <a class="report-card-title" href="mobile-post.php?id=<?= (int)$report['post_id'] ?>"><?= h($report['title']) ?></a>
+            <span class="report-status-badge pending">Pending</span>
           </div>
-          <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
-          <?php if (!empty($item['ai_categories'])): ?><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+          <div class="report-card-meta">
+            <span>Reported by <strong><?= h($report['reporter_name'] ?: ($report['reporter_username'] ?: 'Unknown user')) ?></strong></span>
+            <time><?= h($report['created_at']) ?></time>
+          </div>
+          <div class="report-card-details">
+            <div class="report-card-detail">
+              <span class="report-card-label">Comment by <?= h($report['author_name'] ?: $report['author_username']) ?></span>
+              <p><?= nl2br(h($report['content'])) ?></p>
+            </div>
+            <?php if (($report['reason'] ?? '') !== ''): ?>
+              <div class="report-card-detail">
+                <span class="report-card-label">Reason</span>
+                <p><?= h($report['reason']) ?></p>
+              </div>
+            <?php endif; ?>
+            <?php if (($report['additional_comments'] ?? '') !== ''): ?>
+              <div class="report-card-detail">
+                <span class="report-card-label">Additional details</span>
+                <p><?= nl2br(h($report['additional_comments'])) ?></p>
+              </div>
+            <?php endif; ?>
+          </div>
         </div>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action approve" name="action" value="mobile-restore-comment" onclick="return confirm('Restore this comment to the mobile app?')">Restore</button></form>
+        <form class="row-actions report-card-actions" method="post">
+          <?= $csrf ?>
+          <input type="hidden" name="report_id" value="<?= (int)$report['id'] ?>">
+          <input type="hidden" name="comment_id" value="<?= (int)$report['comment_id'] ?>">
+          <button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Remove this comment from the mobile app?')">Remove Comment</button>
+          <button class="btn-action secondary" name="action" value="mobile-dismiss-comment-report">Dismiss</button>
+        </form>
       </article>
     <?php endforeach; ?>
-    <?php if (!$mobileDismissedComments): ?><p class="empty">No hidden comments are available to restore.</p><?php endif; ?>
+    <?php if (!$mobileCommentReports): ?><p class="empty">No pending comment reports.</p><?php endif; ?>
+    <?php if ($splitReportColumns && !$isDismissedPage): ?></div><?php endif; ?>
+    <?php endif; ?>
+    <?php if ($splitReportColumns && !$isDismissedPage): ?>
+      </section>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+  <?php endif; ?>
+  <?php if ($showDismissedCommentReports): ?>
+    <h3<?= $isDismissedPage ? ' id="reported-comments-heading"' : '' ?>>Dismissed comment reports</h3>
+    <?php if ($isDismissedPage): ?><div class="reported-scroll" aria-label="Dismissed comment reports"><?php endif; ?>
+    <?php foreach ($mobileDismissedCommentReports as $report): ?>
+      <article class="report-card">
+        <div class="report-card-main">
+          <div class="report-card-heading">
+            <a class="report-card-title" href="mobile-post.php?id=<?= (int)$report['post_id'] ?>"><?= h($report['title']) ?></a>
+            <span class="report-status-badge dismissed">Dismissed</span>
+          </div>
+          <div class="report-card-meta">
+            <span>Reported by <strong><?= h($report['reporter_name'] ?: ($report['reporter_username'] ?: 'Unknown user')) ?></strong></span>
+            <time><?= h($report['created_at']) ?></time>
+          </div>
+          <div class="report-card-details">
+            <div class="report-card-detail">
+              <span class="report-card-label">Comment by <?= h($report['author_name'] ?: $report['author_username']) ?></span>
+              <p><?= nl2br(h($report['content'])) ?></p>
+            </div>
+            <?php if (($report['reason'] ?? '') !== ''): ?>
+              <div class="report-card-detail">
+                <span class="report-card-label">Reason</span>
+                <p><?= h($report['reason']) ?></p>
+              </div>
+            <?php endif; ?>
+            <?php if (($report['additional_comments'] ?? '') !== ''): ?>
+              <div class="report-card-detail">
+                <span class="report-card-label">Additional details</span>
+                <p><?= nl2br(h($report['additional_comments'])) ?></p>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+        <form class="row-actions report-card-actions" method="post">
+          <?= $csrf ?>
+          <input type="hidden" name="report_id" value="<?= (int)$report['id'] ?>">
+          <button class="btn-action approve" name="action" value="mobile-restore-comment-report">Restore report</button>
+        </form>
+      </article>
+    <?php endforeach; ?>
+    <?php if (!$mobileDismissedCommentReports): ?><p class="empty">No dismissed comment reports.</p><?php endif; ?>
+    <?php if ($isDismissedPage): ?>
+      </div>
+      </section>
+    </div>
+    <?php endif; ?>
   <?php elseif ($isRemovedCommentsView): ?>
     <?php foreach ($mobileRemovedComments as $item): ?>
       <article class="comment-row">
@@ -238,11 +328,12 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
             <span>commented on</span>
             <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a>
             <?php if ($commentAiFlagged): ?><span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php elseif (!empty($item['ai_categories'])): ?><span class="ai-review-badge" title="This comment requires moderation review">AI REVIEW</span><?php endif; ?>
+            <?php if ((int)$item['report_count'] > 0): ?><span class="flag"><?= (int)$item['report_count'] ?> report<?= (int)$item['report_count'] === 1 ? '' : 's' ?></span><?php endif; ?>
           </div>
           <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
           <?php if (!empty($item['ai_categories'])): ?><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
         </div>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Delete this comment from the mobile app?')">Delete</button></form>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Remove this comment from the mobile app?')">Remove</button></form>
       </article>
     <?php endforeach; ?>
     <?php if (!$mobileComments): ?><p class="empty">No comments to show.</p><?php endif; ?>

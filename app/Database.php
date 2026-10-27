@@ -196,6 +196,20 @@ final class Database
                 ) ENGINE=InnoDB'
             );
             $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS mobile_comment_reports (
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    comment_id INT NOT NULL,
+                    reporter_user_id INT NOT NULL,
+                    reason VARCHAR(255) NULL,
+                    additional_comments TEXT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT "Pending",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX mobile_comment_reports_status (status),
+                    INDEX mobile_comment_reports_comment (comment_id),
+                    INDEX mobile_comment_reports_reporter (reporter_user_id)
+                ) ENGINE=InnoDB'
+            );
+            $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_mobile_user_moderation (
                     mobile_user_id INT NOT NULL PRIMARY KEY,
                     status ENUM("active","suspended","banned") NOT NULL DEFAULT "active",

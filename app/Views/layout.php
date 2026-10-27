@@ -30,7 +30,7 @@
     <div class="body">
       <nav class="sidebar" aria-label="Main">
         <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Overview</a>
-        <a class="<?= in_array($page, ['control', 'posts', 'comments', 'reported', 'removed', 'post', 'restricted'], true) ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Feed</a>
+        <a class="<?= in_array($page, ['control', 'posts', 'comments', 'reported', 'removed', 'dismissed', 'post', 'restricted'], true) ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Feed</a>
         <a class="<?= $page === 'users' || $page === 'user' ? 'on' : '' ?>" href="users.php"><span class="ico"><?= icon_svg('users') ?></span>Users</a>
         <a class="<?= $page === 'logs' ? 'on' : '' ?>" href="logs.php"><span class="ico"><?= icon_svg('history') ?></span>Logs</a>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
@@ -44,21 +44,22 @@
           $tabPages = [
               'posts' => 'Posts', 'comments' => 'Comments',
               'restricted' => 'Restricted', 'reported' => 'Reported', 'removed' => 'Removed',
+              'dismissed' => 'Dismissed',
           ];
           $shortPages = ['post' => 'Posts'];
-          $tabSet = in_array($page, ['posts', 'comments', 'restricted', 'reported', 'removed', 'control', 'post'], true);
+          $tabSet = in_array($page, ['posts', 'comments', 'restricted', 'reported', 'removed', 'dismissed', 'control', 'post'], true);
           if ($tabSet):
         ?>
           <nav class="tabs" aria-label="Moderation">
             <?php foreach ($tabPages as $tabPage => $tabLabel): ?>
               <?php if ($tabPage === 'restricted' && ($user['role'] ?? '') !== 'admin') continue; ?>
-              <?php if ($page === 'control' && !in_array($tabPage, ['posts', 'comments', 'reported', 'removed'], true)) continue; ?>
-              <?php if ($page === 'post' && !in_array($tabPage, ['posts', 'reported', 'removed'], true)) continue; ?>
+              <?php if ($page === 'control' && !in_array($tabPage, ['posts', 'comments', 'reported', 'removed', 'dismissed'], true)) continue; ?>
+              <?php if ($page === 'post' && !in_array($tabPage, ['posts', 'reported', 'removed', 'dismissed'], true)) continue; ?>
               <a href="<?= h($tabPage) ?>.php" class="<?= ($page === $tabPage || (in_array($page, ['post', 'control'], true) && $tabPage === 'posts')) ? 'on' : '' ?>"><?= h($tabLabel) ?></a>
             <?php endforeach; ?>
           </nav>
         <?php endif; ?>
-        <div class="page">
+        <div class="page<?= in_array($page, ['reported', 'dismissed'], true) ? ' report-queue-page' : '' ?>">
           <?php flash_message($flash); ?>
           <?php require __DIR__ . '/pages.php'; ?>
         </div>

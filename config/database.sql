@@ -144,6 +144,21 @@ CREATE TABLE IF NOT EXISTS admin_mobile_comment_moderation (
   INDEX admin_mobile_comment_reports (report_count)
 ) ENGINE=InnoDB;
 
+-- Stores reports submitted by mobile users for comments.
+CREATE TABLE IF NOT EXISTS mobile_comment_reports (
+  id INT NOT NULL AUTO_INCREMENT,
+  comment_id INT NOT NULL,
+  reporter_user_id INT NOT NULL,
+  reason VARCHAR(255) NULL,
+  additional_comments TEXT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY mobile_comment_reports_status (status),
+  KEY mobile_comment_reports_comment (comment_id),
+  KEY mobile_comment_reports_reporter (reporter_user_id)
+) ENGINE=InnoDB;
+
 -- Stores suspension and ban status for mobile-app user accounts.
 CREATE TABLE IF NOT EXISTS admin_mobile_user_moderation (
   mobile_user_id INT NOT NULL PRIMARY KEY,

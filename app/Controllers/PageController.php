@@ -5,7 +5,7 @@ final class PageController
 {
     private const MOBILE_ACTION_PAGES = [
         'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
-        'home', 'posts', 'control', 'reported', 'comments', 'removed', 'users',
+        'home', 'posts', 'control', 'reported', 'comments', 'removed', 'dismissed', 'users',
     ];
 
     private PDO $db;
@@ -246,7 +246,8 @@ final class PageController
             in_array($this->page, self::MOBILE_ACTION_PAGES, true) => [
                 'mobile-approve', 'mobile-remove', 'mobile-restore-post',
                 'mobile-restore-comment-archive', 'mobile-delete-comment',
-                'mobile-hide-comment', 'mobile-restore-comment',
+                'mobile-hide-comment', 'mobile-restore-comment', 'mobile-dismiss-comment-report',
+                'mobile-restore-comment-report',
                 'mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user',
                 'mobile-dismiss-report', 'mobile-restore-report', 'toggle-ai-moderation',
             ],
@@ -284,10 +285,31 @@ final class PageController
             } elseif ($action === 'mobile-delete-comment') {
                 $deleted = $this->mobile->removeComment((int)($_POST['comment_id'] ?? 0));
                 $this->flash($deleted ? 'Mobile comment deleted and the user was notified.' : 'Mobile comment was not found.', $deleted ? 'success' : 'error');
+                if ($deleted && isset($_POST['report_id'])) {
+                    $this->redirect('removed.php?type=comments');
+                }
             } elseif ($action === 'mobile-hide-comment' || $action === 'mobile-restore-comment') {
                 $status = $action === 'mobile-hide-comment' ? 'hidden' : 'approved';
                 $this->mobile->setCommentStatus((int)($_POST['comment_id'] ?? 0), $status);
                 $this->flash('Mobile comment status updated.');
+            } elseif ($action === 'mobile-dismiss-comment-report') {
+                $dismissed = $this->mobile->dismissCommentReport((int)($_POST['report_id'] ?? 0));
+                $this->flash(
+                    $dismissed ? 'Comment report dismissed.' : 'Comment report was already updated.',
+                    $dismissed ? 'success' : 'error'
+                );
+                if ($dismissed) {
+                    $this->redirect('dismissed.php');
+                }
+            } elseif ($action === 'mobile-restore-comment-report') {
+                $restored = $this->mobile->restoreCommentReport((int)($_POST['report_id'] ?? 0));
+                $this->flash(
+                    $restored ? 'Comment report restored to current reports.' : 'Comment report was already updated.',
+                    $restored ? 'success' : 'error'
+                );
+                if ($restored) {
+                    $this->redirect('reported.php');
+                }
             } elseif (in_array($action, ['mobile-suspend-user', 'mobile-ban-user', 'mobile-restore-user'], true)) {
                 $status = ['mobile-suspend-user' => 'suspended', 'mobile-ban-user' => 'banned', 'mobile-restore-user' => 'active'][$action];
                 $suspendedUntil = null;
@@ -336,12 +358,13 @@ final class PageController
             } elseif ($action === 'mobile-dismiss-report') {
                 $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
                 $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
+                if ($updated) {
+                    $this->redirect('dismissed.php');
+                }
             } elseif ($action === 'mobile-restore-report') {
                 $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Pending');
                 $this->flash($updated ? 'Report restored to current reports.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
-                $this->redirect($updated
-                    ? ($this->page === 'mobile-reports' ? 'mobile-reports.php?view=current' : 'reported.php?view=current')
-                    : $this->returnUrl());
+                $this->redirect($updated ? 'reported.php' : $this->returnUrl());
             }
             $this->redirect($this->returnUrl());
         }

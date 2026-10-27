@@ -6,6 +6,7 @@ switch ($page):
     case 'control':
     case 'reported':
     case 'removed':
+    case 'dismissed':
     case 'comments':
     case 'users':
         require __DIR__ . '/pages/mobile-list.php';

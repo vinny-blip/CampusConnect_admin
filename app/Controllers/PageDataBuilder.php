@@ -4,7 +4,7 @@ declare(strict_types=1);
 final class PageDataBuilder
 {
     private const MOBILE_LIST_PAGES = [
-        'home', 'posts', 'control', 'reported', 'comments', 'removed', 'users', 'mobile-reports',
+        'home', 'posts', 'control', 'reported', 'comments', 'removed', 'dismissed', 'users', 'mobile-reports',
     ];
 
     private const REPORT_VIEWS = [
@@ -104,7 +104,7 @@ final class PageDataBuilder
             ));
         }
 
-        $legacyReportStatus = (string)($query['status'] ?? 'pending');
+        $legacyReportStatus = (string)($query['status'] ?? ($this->page === 'dismissed' ? 'dismissed' : 'pending'));
         $legacyReportView = $legacyReportStatus === 'pending' ? 'current' : $legacyReportStatus;
         $requestedReportView = (string)($query['view'] ?? $legacyReportView);
         $data['mobileReportView'] = in_array($requestedReportView, self::REPORT_VIEWS, true)
@@ -114,7 +114,7 @@ final class PageDataBuilder
             ? (($query['type'] ?? 'posts') === 'comments' ? 'comments' : 'posts')
             : ($data['mobileReportView'] === 'removed-comments' ? 'comments' : 'posts');
 
-        $reportPage = in_array($this->page, ['reported', 'mobile-reports'], true);
+        $reportPage = in_array($this->page, ['reported', 'dismissed', 'mobile-reports'], true);
         $showRemovedPosts = $this->page === 'removed'
             ? $data['mobileRemovedType'] === 'posts'
             : $reportPage && $data['mobileReportView'] === 'removed-posts';
@@ -127,8 +127,13 @@ final class PageDataBuilder
         $data['mobileRemovedComments'] = $showRemovedComments
             ? $this->mobile->removedComments($data['mobileQuery'])
             : [];
-        $data['mobileDismissedComments'] = $reportPage && $data['mobileReportView'] === 'dismissed-comments'
+        $data['mobileDismissedComments'] = $this->page === 'dismissed'
+            || ($reportPage && $data['mobileReportView'] === 'dismissed-comments')
             ? $this->mobile->dismissedComments($data['mobileQuery'])
+            : [];
+        $data['mobileDismissedCommentReports'] = $this->page === 'dismissed'
+            || ($reportPage && $data['mobileReportView'] === 'dismissed-comments')
+            ? $this->mobile->dismissedCommentReports($data['mobileQuery'])
             : [];
         if ($this->page === 'users') {
             $data['mobilePosts'] = [];
@@ -136,6 +141,9 @@ final class PageDataBuilder
 
         $data['mobileComments'] = $this->page === 'comments'
             ? $this->mobile->comments($data['mobileQuery'])
+            : [];
+        $data['mobileCommentReports'] = $reportPage && $data['mobileReportView'] === 'current'
+            ? $this->mobile->commentReports($data['mobileQuery'])
             : [];
         $data['mobileUsers'] = in_array($this->page, ['home', 'users'], true)
             ? $this->mobile->users($this->page === 'users' ? $data['mobileQuery'] : '')

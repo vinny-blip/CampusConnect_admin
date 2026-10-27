@@ -65,7 +65,17 @@ final class MobileModerationModel
         if (!$this->available()) return ['total' => 0, 'reported' => 0, 'flagged' => 0];
         $row = $this->db->query(
             "SELECT COUNT(*) AS total,
-                    COALESCE(SUM(COALESCE(m.report_count, 0) > 0), 0) AS reported,
+                    (SELECT COUNT(*) FROM (
+                        SELECT m.mobile_comment_id AS comment_id
+                        FROM admin_mobile_comment_moderation m
+                        JOIN mobile_comments c ON c.id = m.mobile_comment_id
+                        WHERE m.report_count > 0
+                        UNION
+                        SELECT comment_id
+                        FROM mobile_comment_reports r
+                        JOIN mobile_comments c ON c.id = r.comment_id
+                        WHERE LOWER(r.status) = 'pending'
+                    ) reported_comments) AS reported,
                     COALESCE(SUM(COALESCE(m.ai_flagged, 0) = 1), 0) AS flagged
              FROM mobile_comments c
              LEFT JOIN admin_mobile_comment_moderation m ON m.mobile_comment_id = c.id"
@@ -75,6 +85,80 @@ final class MobileModerationModel
             'reported' => (int)($row['reported'] ?? 0),
             'flagged' => (int)($row['flagged'] ?? 0),
         ];
+    }
+
+    /** Lists pending reports submitted for mobile-app comments. */
+    public function commentReports(string $query = ''): array
+    {
+        if (!$this->available()) return [];
+        $sql = "SELECT r.id, r.comment_id, r.reason, r.additional_comments, r.created_at,
+                       c.post_id, c.content,
+                       p.title, reporter.full_name AS reporter_name, reporter.username AS reporter_username,
+                       author.full_name AS author_name, author.username AS author_username
+                FROM mobile_comment_reports r
+                JOIN mobile_comments c ON c.id = r.comment_id
+                JOIN mobile_posts p ON p.id = c.post_id
+                JOIN mobile_users author ON author.id = c.user_id
+                LEFT JOIN mobile_users reporter ON reporter.id = r.reporter_user_id
+                WHERE LOWER(r.status) = 'pending'";
+        $params = [];
+        if ($query !== '') {
+            $sql .= ' AND (c.content LIKE ? OR p.title LIKE ? OR author.username LIKE ? OR reporter.username LIKE ? OR r.reason LIKE ? OR r.additional_comments LIKE ?)';
+            $like = '%' . $query . '%';
+            $params = [$like, $like, $like, $like, $like, $like];
+        }
+        $statement = $this->db->prepare($sql . ' ORDER BY r.created_at DESC LIMIT 300');
+        $statement->execute($params);
+        return $statement->fetchAll();
+    }
+
+    /** Dismisses one pending mobile comment report. */
+    public function dismissCommentReport(int $id): bool
+    {
+        $statement = $this->db->prepare(
+            "UPDATE mobile_comment_reports
+             SET status = 'Dismissed'
+             WHERE id = ? AND LOWER(status) = 'pending'"
+        );
+        $statement->execute([$id]);
+        return $statement->rowCount() > 0;
+    }
+
+    /** Lists dismissed reports submitted for mobile-app comments. */
+    public function dismissedCommentReports(string $query = ''): array
+    {
+        if (!$this->available()) return [];
+        $sql = "SELECT r.id, r.comment_id, r.reason, r.additional_comments, r.created_at,
+                       c.post_id, c.content, p.title,
+                       reporter.full_name AS reporter_name, reporter.username AS reporter_username,
+                       author.full_name AS author_name, author.username AS author_username
+                FROM mobile_comment_reports r
+                JOIN mobile_comments c ON c.id = r.comment_id
+                JOIN mobile_posts p ON p.id = c.post_id
+                JOIN mobile_users author ON author.id = c.user_id
+                LEFT JOIN mobile_users reporter ON reporter.id = r.reporter_user_id
+                WHERE LOWER(r.status) = 'dismissed'";
+        $params = [];
+        if ($query !== '') {
+            $sql .= ' AND (c.content LIKE ? OR p.title LIKE ? OR author.username LIKE ? OR reporter.username LIKE ? OR r.reason LIKE ? OR r.additional_comments LIKE ?)';
+            $like = '%' . $query . '%';
+            $params = [$like, $like, $like, $like, $like, $like];
+        }
+        $statement = $this->db->prepare($sql . ' ORDER BY r.created_at DESC LIMIT 300');
+        $statement->execute($params);
+        return $statement->fetchAll();
+    }
+
+    /** Restores one dismissed mobile comment report to the current reports queue. */
+    public function restoreCommentReport(int $id): bool
+    {
+        $statement = $this->db->prepare(
+            "UPDATE mobile_comment_reports
+             SET status = 'Pending'
+             WHERE id = ? AND LOWER(status) = 'dismissed'"
+        );
+        $statement->execute([$id]);
+        return $statement->rowCount() > 0;
     }
 
     /** Counts mobile reports by day for the dashboard chart. */
@@ -279,9 +363,17 @@ final class MobileModerationModel
         $post = $this->reconcileObviousProfanity([$post])[0];
         $comments = $this->db->prepare(
             "SELECT c.*, u.full_name, u.username, COALESCE(m.status, 'approved') AS moderation_status,
-                    COALESCE(m.report_count, 0) AS report_count, m.ai_flagged, m.ai_categories
+                    COALESCE(m.report_count, 0) + COALESCE(r.pending_report_count, 0) AS report_count,
+                    r.report_reasons, m.ai_flagged, m.ai_categories
              FROM mobile_comments c JOIN mobile_users u ON u.id = c.user_id
              LEFT JOIN admin_mobile_comment_moderation m ON m.mobile_comment_id = c.id
+             LEFT JOIN (
+                 SELECT comment_id, COUNT(*) AS pending_report_count,
+                        GROUP_CONCAT(DISTINCT NULLIF(reason, '') ORDER BY created_at DESC SEPARATOR ', ') AS report_reasons
+                 FROM mobile_comment_reports
+                 WHERE LOWER(status) = 'pending'
+                 GROUP BY comment_id
+             ) r ON r.comment_id = c.id
              WHERE c.post_id = ? ORDER BY c.created_at ASC"
         );
         $comments->execute([$id]);
@@ -353,11 +445,18 @@ final class MobileModerationModel
         if (!$this->available()) return [];
         $sql = "SELECT c.*, p.title, u.full_name, u.username,
                     COALESCE(m.status, 'approved') AS moderation_status,
-                    COALESCE(m.report_count, 0) AS report_count, m.ai_flagged, m.ai_categories,
+                    COALESCE(m.report_count, 0) + COALESCE(r.pending_report_count, 0) AS report_count,
+                    m.ai_flagged, m.ai_categories,
                     m.mobile_comment_id AS has_moderation
                 FROM mobile_comments c JOIN mobile_posts p ON p.id = c.post_id
                 JOIN mobile_users u ON u.id = c.user_id
-                LEFT JOIN admin_mobile_comment_moderation m ON m.mobile_comment_id = c.id";
+                LEFT JOIN admin_mobile_comment_moderation m ON m.mobile_comment_id = c.id
+                LEFT JOIN (
+                    SELECT comment_id, COUNT(*) AS pending_report_count
+                    FROM mobile_comment_reports
+                    WHERE LOWER(status) = 'pending'
+                    GROUP BY comment_id
+                ) r ON r.comment_id = c.id";
         $params = [];
         if ($query !== '') {
             $sql .= ' WHERE c.content LIKE ? OR u.username LIKE ? OR p.title LIKE ?';
@@ -873,6 +972,11 @@ final class MobileModerationModel
             ]);
 
             $this->db->prepare('DELETE FROM admin_mobile_comment_moderation WHERE mobile_comment_id = ?')->execute([$id]);
+            $this->db->prepare(
+                "UPDATE mobile_comment_reports
+                 SET status = 'Resolved'
+                 WHERE comment_id = ? AND LOWER(status) = 'pending'"
+            )->execute([$id]);
 
             $delete = $this->db->prepare('DELETE FROM mobile_comments WHERE id = ?');
             $delete->execute([$id]);

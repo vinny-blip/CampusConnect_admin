@@ -6,7 +6,7 @@ final class Router
     private const ROUTES = [
         'index', 'login', 'register', 'home', 'control', 'queues',
         'about', 'faqs', 'post', 'overview', 'posts',
-        'comments', 'restricted', 'reported', 'removed', 'users', 'user', 'logs',
+        'comments', 'restricted', 'reported', 'removed', 'dismissed', 'users', 'user', 'logs',
         'notifications', 'profile', 'search',
         'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
     ];
