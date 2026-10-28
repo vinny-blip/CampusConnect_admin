@@ -100,6 +100,11 @@ final class AiModerationModel
             return trim($key);
         }
 
+        $environmentKey = $_ENV['OPENAI_API_KEY'] ?? '';
+        if (is_string($environmentKey) && trim($environmentKey) !== '' && trim($environmentKey) !== 'PASTE_YOUR_OPENAI_API_KEY_HERE') {
+            return trim($environmentKey);
+        }
+
         $serverKey = $_SERVER['OPENAI_API_KEY'] ?? '';
         if (is_string($serverKey) && trim($serverKey) !== '' && trim($serverKey) !== 'PASTE_YOUR_OPENAI_API_KEY_HERE') {
             return trim($serverKey);

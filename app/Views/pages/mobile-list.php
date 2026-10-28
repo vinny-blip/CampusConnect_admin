@@ -13,13 +13,23 @@ $isDismissedCommentsView = $isReports && $mobileReportView === 'dismissed-commen
 $showDismissedCommentReports = $isDismissedPage || $isDismissedCommentsView;
 $splitReportColumns = ($page === 'reported' && $mobileReportView === 'current') || $isDismissedPage;
 $isReportArchiveView = !$isDismissedPage && $isReports && ($isRemovedPostsView || $isRemovedCommentsView || $isDismissedCommentsView);
+$visibleAiCategories = static function ($categories): string {
+  $categories = array_map('trim', explode(',', (string)$categories));
+  $categories = array_filter(
+    $categories,
+    static fn(string $category): bool => $category !== '' && strtolower($category) !== 'moderation_unavailable'
+  );
+  return implode(', ', $categories);
+};
 $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal History' : ($isRemoved ? 'Removed' : ($isDismissedPage ? 'Dismissed' : ($isComments ? 'Comments' : ($isReports ? 'Reported' : ($page === 'home' ? 'Overview' : 'Posts'))))));
 ?>
 <?php $showAiToggle = in_array($page, ['control', 'posts', 'comments'], true); ?>
 <?php if ($showAiToggle): ?><div class="moderation-page-header"><?php endif; ?>
 <div class="page-heading">
   <h2><?= h($heading) ?></h2>
-  <p class="sub"><?= $isMobileStandalone ? 'Shared Hostinger data from the CampusConnect mobile application.' : 'Content from the CampusConnect mobile application.' ?></p>
+  <?php if ($page !== 'home'): ?>
+    <p class="sub"><?= $isMobileStandalone ? 'Shared Hostinger data from the CampusConnect mobile application.' : 'Content from the CampusConnect mobile application.' ?></p>
+  <?php endif; ?>
 </div>
 <?php if ($showAiToggle): ?>
   <form class="ai-moderation-form moderation-ai-toggle-form" method="post">
@@ -264,9 +274,10 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     <?php if (!$mobileRemovedComments): ?><p class="empty">No removed comments are available to restore.</p><?php endif; ?>
   <?php elseif ($isRemovedPostsView): ?>
     <?php foreach ($mobileRemovedPosts as $item): ?>
+      <?php $removedPostAiCategories = $visibleAiCategories($item['ai_categories'] ?? ''); ?>
       <div class="row-item mobile-post-row">
         <span class="post-main-info">
-          <b><a href="mobile-post.php?id=<?= (int)$item['mobile_post_id'] ?>&archive=1"><?= h($item['title']) ?></a></b><?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php endif; ?><?php if (!empty($item['ai_categories'])): ?><br><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+          <b><a href="mobile-post.php?id=<?= (int)$item['mobile_post_id'] ?>&archive=1"><?= h($item['title']) ?></a></b><?php if (!empty($item['ai_flagged'])): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php endif; ?><?php if ($removedPostAiCategories !== ''): ?><br><span class="flag">AI detected: <?= h($removedPostAiCategories) ?></span><?php endif; ?>
         </span>
         <dl class="post-meta-table">
           <div class="post-meta-row">
@@ -319,7 +330,11 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     <?php if (!$mobileUsers): ?><p class="empty">No users match this filter.</p><?php endif; ?>
   <?php elseif ($isComments): ?>
     <?php foreach ($mobileComments as $item): ?>
-      <?php $commentAiFlagged = !empty($item['ai_flagged']); ?>
+      <?php
+        $commentAiFlagged = !empty($item['ai_flagged']);
+        $commentAiCategories = $visibleAiCategories($item['ai_categories'] ?? '');
+        $commentAiUnavailable = str_contains(strtolower((string)($item['ai_categories'] ?? '')), 'moderation_unavailable');
+      ?>
       <article class="comment-row">
         <span class="comment-avatar" aria-hidden="true"><?= h(mb_strtoupper(mb_substr((string)$item['username'], 0, 1))) ?></span>
         <div class="comment-body">
@@ -327,22 +342,25 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
             <b><?= h($item['username']) ?></b>
             <span>commented on</span>
             <a href="mobile-post.php?id=<?= (int)$item['post_id'] ?>"><?= h($item['title']) ?></a>
-            <?php if ($commentAiFlagged): ?><span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php elseif (!empty($item['ai_categories'])): ?><span class="ai-review-badge" title="This comment requires moderation review">AI REVIEW</span><?php endif; ?>
+            <?php if ($commentAiFlagged): ?><span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php elseif ($commentAiCategories !== ''): ?><span class="ai-review-badge" title="This comment requires moderation review">AI REVIEW</span><?php elseif ($aiModerationEnabled || $commentAiUnavailable): ?><span class="pending-badge" title="This comment is waiting for moderator review">PENDING REVIEW</span><?php endif; ?>
             <?php if ((int)$item['report_count'] > 0): ?><span class="flag"><?= (int)$item['report_count'] ?> report<?= (int)$item['report_count'] === 1 ? '' : 's' ?></span><?php endif; ?>
           </div>
           <p class="comment-text"><?= nl2br(h($item['content'])) ?></p>
-          <?php if (!empty($item['ai_categories'])): ?><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+          <?php if ($commentAiCategories !== ''): ?><span class="flag">AI detected: <?= h($commentAiCategories) ?></span><?php endif; ?>
         </div>
         <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$item['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Remove this comment from the mobile app?')">Remove</button></form>
       </article>
     <?php endforeach; ?>
     <?php if (!$mobileComments): ?><p class="empty">No comments to show.</p><?php endif; ?>
-  <?php elseif (!$isReports): ?>
+  <?php elseif (!$isReports && $page !== 'home'): ?>
     <?php foreach ($mobilePosts as $item): ?>
-      <?php $aiFlagged = !empty($item['ai_flagged']); $aiReviewRequired = $aiFlagged || !empty($item['ai_categories']); ?>
+      <?php
+        $aiFlagged = !empty($item['ai_flagged']);
+        $aiCategories = $visibleAiCategories($item['ai_categories'] ?? '');
+      ?>
       <div class="row-item mobile-post-row">
         <span class="post-main-info">
-          <b><a href="mobile-post.php?id=<?= (int)$item['id'] ?>"><?= h($item['title']) ?></a></b><?php if ($aiFlagged): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php elseif (!empty($item['ai_categories'])): ?><span class="ai-review-badge" title="This post requires moderation review">AI REVIEW</span><?php elseif ($item['moderation_status'] === 'pending'): ?><span class="pending-badge" title="This post is waiting for moderator review">PENDING REVIEW</span><?php endif; ?><?php if (!empty($item['ai_categories'])): ?><br><span class="flag">AI detected: <?= h($item['ai_categories']) ?></span><?php endif; ?>
+          <b><a href="mobile-post.php?id=<?= (int)$item['id'] ?>"><?= h($item['title']) ?></a></b><?php if ($aiFlagged): ?><span class="ai-flag-badge" title="This post was flagged by AI moderation">AI FLAGGED</span><?php elseif ($aiCategories !== ''): ?><span class="ai-review-badge" title="This post requires moderation review">AI REVIEW</span><?php elseif ($item['moderation_status'] === 'pending'): ?><span class="pending-badge" title="This post is waiting for moderator review">PENDING REVIEW</span><?php endif; ?><?php if ($aiCategories !== ''): ?><br><span class="flag">AI detected: <?= h($aiCategories) ?></span><?php endif; ?>
         </span>
         <dl class="post-meta-table">
           <div class="post-meta-row">

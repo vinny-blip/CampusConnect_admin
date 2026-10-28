@@ -93,16 +93,9 @@ final class PageDataBuilder
         $data['mobileStatus'] = $this->page === 'home'
             ? 'approved'
             : ($this->page === 'reported' ? 'pending' : (string)($query['status'] ?? ''));
-        $data['mobilePosts'] = in_array($this->page, ['comments', 'reported', 'removed', 'mobile-reports'], true)
+        $data['mobilePosts'] = in_array($this->page, ['home', 'comments', 'reported', 'removed', 'mobile-reports'], true)
             ? []
             : $this->mobile->posts($data['mobileStatus'], $data['mobileQuery']);
-
-        if ($this->page === 'home') {
-            $data['mobilePosts'] = array_values(array_filter(
-                $data['mobilePosts'],
-                static fn(array $post): bool => empty($post['ai_flagged'])
-            ));
-        }
 
         $legacyReportStatus = (string)($query['status'] ?? ($this->page === 'dismissed' ? 'dismissed' : 'pending'));
         $legacyReportView = $legacyReportStatus === 'pending' ? 'current' : $legacyReportStatus;

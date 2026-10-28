@@ -3,7 +3,15 @@
   <p class="empty">Mobile post not found or the mobile schema is unavailable.</p>
 <?php else: ?>
   <article class="post-card">
-    <?php if (!empty($mobilePost['ai_flagged'])): ?><div class="ai-alert" role="alert"><strong>AI FLAGGED</strong><span>This post was flagged for possible policy violations. Human review is required.</span><?php if (!empty($mobilePost['ai_categories'])): ?><small>Detected: <?= h($mobilePost['ai_categories']) ?></small><?php endif; ?></div><?php elseif (!empty($mobilePost['ai_categories'])): ?><div class="ai-alert ai-alert-review" role="status"><strong>AI REVIEW REQUIRED</strong><span>Automated moderation could not clear this post.</span><small>Reason: <?= h($mobilePost['ai_categories']) ?></small></div><?php endif; ?>
+    <?php
+      $mobilePostAiCategories = array_map('trim', explode(',', (string)($mobilePost['ai_categories'] ?? '')));
+      $mobilePostAiCategories = array_filter(
+          $mobilePostAiCategories,
+          static fn(string $category): bool => $category !== '' && strtolower($category) !== 'moderation_unavailable'
+      );
+      $mobilePostAiCategoriesText = implode(', ', $mobilePostAiCategories);
+    ?>
+    <?php if (!empty($mobilePost['ai_flagged'])): ?><div class="ai-alert" role="alert"><strong>AI FLAGGED</strong><span>This post was flagged for possible policy violations. Human review is required.</span><?php if ($mobilePostAiCategoriesText !== ''): ?><small>Detected: <?= h($mobilePostAiCategoriesText) ?></small><?php endif; ?></div><?php elseif ($mobilePostAiCategoriesText !== ''): ?><div class="ai-alert ai-alert-review" role="status"><strong>AI REVIEW REQUIRED</strong><span>Automated moderation could not clear this post.</span><small>Reason: <?= h($mobilePostAiCategoriesText) ?></small></div><?php endif; ?>
     <p class="sub"><?= h($mobilePost['category']) ?> · <?= h($mobilePost['username']) ?> · <?= h($mobilePost['moderation_status']) ?><?= !empty($mobilePost['is_archived']) ? ' archive' : '' ?></p>
     <h3>Title: <?= h($mobilePost['title']) ?></h3>
     <p><?= nl2br(h($mobilePost['content'])) ?></p>
