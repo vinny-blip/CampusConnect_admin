@@ -8,8 +8,11 @@ declare(strict_types=1);
 final class MobileModerationModel
 {
     /** Sets up mobile-app moderation queries for this dashboard moderator. */
-    public function __construct(private PDO $db, private int $adminId)
+    public function __construct(private PDO $db, private int $adminId, private string $role = 'moderator')
     {
+        if (!in_array($role, ['admin', 'moderator'], true)) {
+            throw new InvalidArgumentException('Invalid dashboard role.');
+        }
     }
 
     /** Checks whether the mobile-app database tables are available. */
@@ -680,12 +683,12 @@ final class MobileModerationModel
         if (!in_array($status, ['pending', 'approved', 'removed'], true)) return false;
         $statement = $this->db->prepare(
             "INSERT INTO admin_mobile_post_moderation
-                (mobile_post_id, status, report_reason, moderated_by, moderated_at)
-             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (mobile_post_id, status, report_reason, moderated_by, moderated_by_role, moderated_at)
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
              ON DUPLICATE KEY UPDATE status=VALUES(status), report_reason=VALUES(report_reason),
-                moderated_by=VALUES(moderated_by), moderated_at=CURRENT_TIMESTAMP"
+                moderated_by=VALUES(moderated_by), moderated_by_role=VALUES(moderated_by_role), moderated_at=CURRENT_TIMESTAMP"
         );
-        $statement->execute([$id, $status, trim($reason), $this->adminId]);
+        $statement->execute([$id, $status, trim($reason), $this->adminId, $this->role]);
         return $statement->rowCount() > 0;
     }
 
@@ -747,10 +750,11 @@ final class MobileModerationModel
             $insert->execute(array_values($row));
             $this->db->prepare('DELETE FROM admin_removed_mobile_posts WHERE id = ?')->execute([$archiveId]);
             $this->db->prepare(
-                "INSERT INTO admin_mobile_post_moderation (mobile_post_id, status, moderated_by, moderated_at)
-                 VALUES (?, 'approved', ?, CURRENT_TIMESTAMP)
-                 ON DUPLICATE KEY UPDATE status = 'approved', moderated_by = VALUES(moderated_by), moderated_at = CURRENT_TIMESTAMP"
-            )->execute([(int)$row['id'], $this->adminId]);
+                "INSERT INTO admin_mobile_post_moderation (mobile_post_id, status, moderated_by, moderated_by_role, moderated_at)
+                 VALUES (?, 'approved', ?, ?, CURRENT_TIMESTAMP)
+                 ON DUPLICATE KEY UPDATE status = 'approved', moderated_by = VALUES(moderated_by),
+                    moderated_by_role = VALUES(moderated_by_role), moderated_at = CURRENT_TIMESTAMP"
+            )->execute([(int)$row['id'], $this->adminId, $this->role]);
             $this->db->prepare(
                 "INSERT INTO mobile_notifications (user_id, type, title, message, post_id)
                  VALUES (?, 'moderation', ?, ?, ?)"
@@ -771,10 +775,11 @@ final class MobileModerationModel
     /** Archives and removes a mobile post with a moderation reason. */
     public function removePost(int $id, string $reason = 'Violating community guidelines'): bool
     {
+        $accountTable = $this->role === 'admin' ? 'superadmin_users' : 'admin_users';
         $statement = $this->db->prepare(
             'SELECT p.user_id, p.title, p.content, p.category, p.created_at,
                     u.full_name, u.username, m.ai_flagged, m.ai_categories,
-                    (SELECT name FROM admin_users WHERE id = ?) AS admin_name
+                    (SELECT name FROM ' . $accountTable . ' WHERE id = ?) AS admin_name
              FROM mobile_posts p
              LEFT JOIN mobile_users u ON u.id = p.user_id
              LEFT JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
@@ -795,8 +800,8 @@ final class MobileModerationModel
             $archive = $this->db->prepare(
                 'INSERT INTO admin_removed_mobile_posts
                     (mobile_post_id, mobile_user_id, title, content, category, author_name, author_username,
-                     ai_flagged, ai_categories, reason, removed_by, removed_by_name, post_created_at, post_data)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                     ai_flagged, ai_categories, reason, removed_by, removed_by_role, removed_by_name, post_created_at, post_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $archive->execute([
                 $id,
@@ -810,6 +815,7 @@ final class MobileModerationModel
                 $post['ai_categories'],
                 $reason,
                 $this->adminId,
+                $this->role,
                 $post['admin_name'],
                 $post['created_at'],
                 json_encode($rawPost, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
@@ -911,10 +917,11 @@ final class MobileModerationModel
     /** Archives and removes a mobile comment with a moderation reason. */
     public function removeComment(int $id, string $reason = 'Violating community guidelines'): bool
     {
+        $accountTable = $this->role === 'admin' ? 'superadmin_users' : 'admin_users';
         $statement = $this->db->prepare(
             'SELECT c.id, c.user_id, c.post_id, c.content, c.created_at, p.title AS post_title,
                     u.full_name, u.username, m.ai_flagged, m.ai_categories,
-                    (SELECT name FROM admin_users WHERE id = ?) AS admin_name
+                    (SELECT name FROM ' . $accountTable . ' WHERE id = ?) AS admin_name
              FROM mobile_comments c
              LEFT JOIN mobile_posts p ON p.id = c.post_id
              LEFT JOIN mobile_users u ON u.id = c.user_id
@@ -935,8 +942,8 @@ final class MobileModerationModel
             $this->db->prepare(
                 'INSERT INTO admin_removed_mobile_comments
                     (mobile_comment_id, mobile_post_id, mobile_user_id, content, post_title, author_name, author_username,
-                     ai_flagged, ai_categories, reason, removed_by, removed_by_name, comment_created_at, comment_data)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                     ai_flagged, ai_categories, reason, removed_by, removed_by_role, removed_by_name, comment_created_at, comment_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
                 $id,
                 (int)($comment['post_id'] ?? 0),
@@ -949,6 +956,7 @@ final class MobileModerationModel
                 $comment['ai_categories'],
                 $reason,
                 $this->adminId,
+                $this->role,
                 $comment['admin_name'],
                 $comment['created_at'],
                 json_encode($rawComment, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
@@ -995,12 +1003,12 @@ final class MobileModerationModel
         if (!in_array($status, ['approved', 'hidden', 'removed'], true)) return false;
         $statement = $this->db->prepare(
             "INSERT INTO admin_mobile_comment_moderation
-                (mobile_comment_id, status, moderated_by, moderated_at)
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                (mobile_comment_id, status, moderated_by, moderated_by_role, moderated_at)
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
              ON DUPLICATE KEY UPDATE status=VALUES(status), moderated_by=VALUES(moderated_by),
-                moderated_at=CURRENT_TIMESTAMP"
+                moderated_by_role=VALUES(moderated_by_role), moderated_at=CURRENT_TIMESTAMP"
         );
-        $statement->execute([$id, $status, $this->adminId]);
+        $statement->execute([$id, $status, $this->adminId, $this->role]);
         return $statement->rowCount() > 0;
     }
 
@@ -1030,11 +1038,11 @@ final class MobileModerationModel
         if ($status === 'suspended' && ($suspendedUntil === null || $timezoneOffset === null)) return false;
         $statement = $this->db->prepare(
             "INSERT INTO admin_mobile_user_moderation
-                (mobile_user_id, status, suspended_until, suspension_timezone_offset, reason, moderated_by, moderated_at)
-             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (mobile_user_id, status, suspended_until, suspension_timezone_offset, reason, moderated_by, moderated_by_role, moderated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
              ON DUPLICATE KEY UPDATE status=VALUES(status), suspended_until=VALUES(suspended_until),
                 suspension_timezone_offset=VALUES(suspension_timezone_offset), reason=VALUES(reason),
-                moderated_by=VALUES(moderated_by), moderated_at=CURRENT_TIMESTAMP"
+                moderated_by=VALUES(moderated_by), moderated_by_role=VALUES(moderated_by_role), moderated_at=CURRENT_TIMESTAMP"
         );
         $statement->execute([
             $id,
@@ -1043,6 +1051,7 @@ final class MobileModerationModel
             $status === 'suspended' ? $timezoneOffset : null,
             trim($reason),
             $this->adminId,
+            $this->role,
         ]);
         return $statement->rowCount() > 0;
     }

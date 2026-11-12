@@ -2,6 +2,10 @@
 // Selects the page template that matches the route handled by the controller.
 switch ($page):
     case 'home':
+        require ($user['role'] ?? '') === 'admin'
+            ? __DIR__ . '/pages/moderator-accounts.php'
+            : __DIR__ . '/pages/mobile-list.php';
+        break;
     case 'posts':
     case 'control':
     case 'reported':
@@ -12,7 +16,9 @@ switch ($page):
         require __DIR__ . '/pages/mobile-list.php';
         break;
     case 'logs':
-        require __DIR__ . '/pages/logs.php';
+        require ($user['role'] ?? '') === 'admin'
+            ? __DIR__ . '/pages/moderator-logs.php'
+            : __DIR__ . '/pages/logs.php';
         break;
     case 'user':
         require __DIR__ . '/pages/user-activity.php';

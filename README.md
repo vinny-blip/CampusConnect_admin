@@ -53,8 +53,8 @@ configuration files.
    Check that log after reproducing the issue; HTTP 401 indicates key
    authentication, HTTP 403 indicates access/permission, and HTTP 429 indicates
    rate or quota limits. The log does not include the API key or submitted text.
-6. Visit the domain and register accounts before using the dashboard. Set the
-   `role` column to `admin` in phpMyAdmin for each administrator account.
+6. Visit the domain to register Student Moderator accounts. Provision Admin
+   accounts separately as described below.
 
 For Hostinger Git deployment, configure the database environment variables in
 the hosting environment or separately upload `.env` beside `.htaccess` and
@@ -65,16 +65,75 @@ alongside `.htaccess`; do not include it in a public download or commit it to
 Git. Verify that the `.env` file and `public_html/.htaccess` are in the project
 root.
 
-MySQL must be available for login and dashboard access. Passwords are hashed.
-Set `admin_users.role` to `admin` for each administrator; new registrations
-default to `moderator`.
+MySQL must be available for login and dashboard access. Student Moderator
+accounts remain in `admin_users`; public registration only creates moderators.
+Admin accounts are stored separately in `superadmin_users` and cannot be
+created through public registration. On login, select the account's role;
+selecting Admin does not grant administrator access.
+
+On the server, an operator with SSH access can create Admin accounts without
+putting a password in project files:
+
+```sh
+php app/cli/provision-admins.php first@example.edu second@example.edu
+```
+
+Enter and confirm the password when prompted; input is visible in the terminal.
+The command stores password hashes and verifies each login before committing.
+It refuses to overwrite an existing Admin account, and the database changes
+roll back if any account fails. When creating multiple accounts together they
+share the entered password: for better security, provision each account
+separately with a unique password. Each administrator should change any shared
+initial password immediately in Profile. Run this only after the updated site
+has created `superadmin_users`; it does not change Student Moderator accounts.
+
+The application creates `superadmin_users` and `superadmin_app_state` on the
+first request and updates shared moderation tables to record the actor's role.
+The configured database user needs `CREATE` and `ALTER` privileges for this
+upgrade.
+Existing moderator accounts and state are not moved. Existing accounts marked
+`admin` in `admin_users` are not automatically copied or promoted; provision
+an account in `superadmin_users` for each verified administrator instead.
+Back up the database before deploying schema changes.
+
+To provision an administrator, generate a unique password hash on a trusted
+machine or server with PHP. For example, run the following in a private SSH
+session and enter the password on the next line (input is visible):
+
+```sh
+php -r '$p = rtrim(fgets(STDIN), "\r\n"); echo password_hash($p, PASSWORD_DEFAULT), PHP_EOL;'
+```
+
+In phpMyAdmin, insert a row into `superadmin_users` with the administrator's
+name, verified email and the resulting `password_hash`. Do not enter a
+plaintext password in the database, share a default password among accounts,
+or put credentials in the project files. Give each administrator their own
+password securely and have them change it in Profile. Repeat this for every
+authorized administrator. No Admin accounts or passwords are created
+automatically by this release.
 The Profile page supports changing the display name, uploading a JPG, PNG, or
 WebP profile picture (up to 5 MB), and changing the password after verifying
 the current password. The app adds `admin_users.profile_image` automatically
 to existing databases; uploaded images are stored under `public/uploads/profile/`.
-Only administrators can open the Restricted page. The admin dashboard tables
-are prefixed with `admin_` so they remain distinct from the mobile
+Only administrators can open the Restricted page. Dashboard tables use
+`admin_` or `superadmin_` prefixes so they remain distinct from the mobile
 application's `mobile_` tables.
+Admins see a separate overview listing Student Moderator accounts instead of
+the mobile moderation dashboard. They can suspend or restore a moderator, or
+permanently remove an account after confirmation. Suspension blocks new
+sign-ins and ends existing dashboard sessions. An Admin chooses a lift date
+and time in their local time zone or can restore the account early. Timed
+suspensions expire when the Admin overview is checked or the moderator next
+signs in; previously indefinite suspensions still require manual restoration.
+Removal also deletes that account's dashboard
+state, but keeps its login history. Student Moderator registrations are not
+email-verified, so removal is not a permanent ban on re-registration.
+
+Admins can view Student Moderator sign-in and sign-out history under Moderator
+Logs. History starts after this feature is deployed; previous sign-ins cannot
+be reconstructed. Closing a browser without signing out may leave the sign-out
+time unrecorded. Existing Student Moderator sessions must sign in again after
+the upgrade so future sessions can be tracked.
 Moderators receive an in-app notification for each AI-flagged mobile post
 recorded in the last 30 days. The header bell displays the unread count and
 checks for new notifications every 30 seconds while the dashboard is open.
@@ -169,7 +228,7 @@ including common punctuation, spacing, and number substitutions used to evade
 a simple word filter. Obvious content is held even if the external moderation
 response does not cross its classification threshold.
 
-On a post's detail page, moderators can edit its title and text, add up to five tags, lock or unlock comments, and permanently delete comments. Hidden comments can be restored from the Comments page. Any student moderator can toggle the globally shared AI Moderation setting, which calls OpenAI's Moderation API for submitted text and supported images. Flagged posts stay pending and flagged comments stay hidden until the admin reviews them; API errors also hold content for review. The AI never removes content. Enabling this feature sends submission text and supported images to OpenAI, so disclose this in the student privacy notice. The API does not determine academic relevance or plagiarism, so those guidelines still require other checks and human review.
+On a post's detail page, moderators can edit its title and text, add up to five tags, lock or unlock comments, and permanently delete comments. Hidden comments can be restored from the Comments page. Any student moderator can toggle the globally shared AI Moderation setting, which calls OpenAI's Moderation API for submitted text and supported images. Flagged posts stay pending and flagged comments stay hidden until a moderator reviews them; API errors also hold content for review. The AI never removes content. Enabling this feature sends submission text and supported images to OpenAI, so disclose this in the student privacy notice. The API does not determine academic relevance or plagiarism, so those guidelines still require other checks and human review.
 
 The Home page shows separate containers for the top five most-liked approved posts created today and a post/comment report chart for the past 7 days; Overview shows the report chart for the past 14 days. Report totals remain after a report is dismissed or its content is deleted. Posts show their original posting date, and removed posts show the moderator removal date. Older reports/removals without stored timestamps are identified as unavailable rather than assigned an estimated date.
 

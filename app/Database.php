@@ -45,8 +45,57 @@ final class Database
             if ((int)$profileImageColumn === 0) {
                 $mysql->exec('ALTER TABLE admin_users ADD COLUMN profile_image VARCHAR(255) NULL AFTER role');
             }
+            $suspendedColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_users' AND COLUMN_NAME = 'suspended'"
+            )->fetchColumn();
+            if ((int)$suspendedColumn === 0) {
+                $mysql->exec('ALTER TABLE admin_users ADD COLUMN suspended TINYINT(1) NOT NULL DEFAULT 0');
+            }
+            $moderatorSuspensionExpiryColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_users' AND COLUMN_NAME = 'suspended_until'"
+            )->fetchColumn();
+            if ((int)$moderatorSuspensionExpiryColumn === 0) {
+                $mysql->exec('ALTER TABLE admin_users ADD COLUMN suspended_until DATETIME NULL AFTER suspended');
+            }
             $mysql->query('SELECT id, name, email, password_hash, role, profile_image FROM admin_users LIMIT 0');
             $mysql->query('SELECT user_id, state_key, state_data FROM admin_app_state LIMIT 0');
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS superadmin_moderator_login_logs (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    moderator_id BIGINT UNSIGNED NULL,
+                    moderator_name VARCHAR(120) NOT NULL,
+                    moderator_email VARCHAR(254) NOT NULL,
+                    login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    logout_at DATETIME NULL,
+                    end_reason ENUM("logout", "suspended", "removed") NULL,
+                    INDEX superadmin_moderator_log_user (moderator_id, logout_at),
+                    INDEX superadmin_moderator_log_time (login_at),
+                    CONSTRAINT superadmin_moderator_log_user_fk FOREIGN KEY (moderator_id) REFERENCES admin_users (id) ON DELETE SET NULL
+                ) ENGINE=InnoDB'
+            );
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS superadmin_users (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(120) NOT NULL,
+                    email VARCHAR(254) NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    profile_image VARCHAR(255) NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY superadmin_users_email_unique (email)
+                ) ENGINE=InnoDB'
+            );
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS superadmin_app_state (
+                    user_id BIGINT UNSIGNED NOT NULL,
+                    state_key VARCHAR(40) NOT NULL,
+                    state_data LONGTEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, state_key),
+                    CONSTRAINT superadmin_app_state_user_fk FOREIGN KEY (user_id) REFERENCES superadmin_users (id) ON DELETE CASCADE
+                ) ENGINE=InnoDB'
+            );
             // Store mobile login times and a hash of each session token for secure lookups.
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_mobile_login_logs (
@@ -102,14 +151,33 @@ final class Database
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_user_restrictions (
                     user_id BIGINT UNSIGNED NOT NULL,
-                    restricted_by BIGINT UNSIGNED NOT NULL,
+                    restricted_by BIGINT UNSIGNED NULL,
+                    superadmin_restricted_by BIGINT UNSIGNED NULL,
                     reason VARCHAR(500) NOT NULL,
                     created_at BIGINT NOT NULL,
                     PRIMARY KEY (user_id),
                     CONSTRAINT admin_user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE,
-                    CONSTRAINT admin_user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE
+                    CONSTRAINT admin_user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE,
+                    CONSTRAINT admin_user_restrictions_superadmin_fk FOREIGN KEY (superadmin_restricted_by) REFERENCES superadmin_users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB'
             );
+            $restrictionColumn = $mysql->query(
+                "SELECT IS_NULLABLE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_user_restrictions' AND COLUMN_NAME = 'restricted_by'"
+            )->fetchColumn();
+            if ($restrictionColumn === 'NO') {
+                $mysql->exec('ALTER TABLE admin_user_restrictions MODIFY restricted_by BIGINT UNSIGNED NULL');
+            }
+            $superadminRestrictionColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_user_restrictions' AND COLUMN_NAME = 'superadmin_restricted_by'"
+            )->fetchColumn();
+            if ((int)$superadminRestrictionColumn === 0) {
+                $mysql->exec(
+                    'ALTER TABLE admin_user_restrictions ADD COLUMN superadmin_restricted_by BIGINT UNSIGNED NULL,
+                     ADD CONSTRAINT admin_user_restrictions_superadmin_fk FOREIGN KEY (superadmin_restricted_by) REFERENCES superadmin_users (id) ON DELETE CASCADE'
+                );
+            }
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS admin_ai_moderation_settings (
                     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
@@ -258,6 +326,21 @@ final class Database
                     INDEX mobile_notifications_user (user_id, is_read, created_at)
                 ) ENGINE=InnoDB'
             );
+            foreach ([
+                'admin_mobile_post_moderation' => 'moderated_by_role',
+                'admin_mobile_comment_moderation' => 'moderated_by_role',
+                'admin_mobile_user_moderation' => 'moderated_by_role',
+                'admin_removed_mobile_posts' => 'removed_by_role',
+                'admin_removed_mobile_comments' => 'removed_by_role',
+            ] as $table => $column) {
+                $check = $mysql->prepare(
+                    'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+                );
+                $check->execute([$table, $column]);
+                if ((int)$check->fetchColumn() === 0) {
+                    $mysql->exec("ALTER TABLE {$table} ADD COLUMN {$column} ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator'");
+                }
+            }
             self::$connection = $mysql;
             return $mysql;
         } catch (PDOException $exception) {

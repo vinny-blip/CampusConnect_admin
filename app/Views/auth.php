@@ -21,7 +21,22 @@
       <label for="email">Institutional Email</label>
       <input id="email" name="email" type="email" required autocomplete="username">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" required autocomplete="current-password">
+      <span class="auth-password-field">
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+        <button class="auth-password-toggle" type="button" aria-label="Show password" aria-controls="password" aria-pressed="false" title="Show password" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path class="auth-password-slash" d="M4 4l16 16"></path>
+          </svg>
+        </button>
+      </span>
+      <label for="role">Role</label>
+      <select id="role" name="role" required>
+        <option value="" selected disabled>Select your role</option>
+        <option value="moderator">Student Moderator</option>
+        <option value="admin">Admin</option>
+      </select>
       <?php flash_message($flash); ?>
       <button class="btn" type="submit">Login</button>
     </form>
@@ -43,5 +58,18 @@
     <p class="alt">Already registered? <a href="login.php">Log in</a></p>
   <?php endif; ?>
 </main>
+<script>
+  const passwordToggle = document.querySelector('.auth-password-toggle');
+  if (passwordToggle) {
+    const passwordField = document.getElementById(passwordToggle.getAttribute('aria-controls'));
+    passwordToggle.hidden = false;
+    passwordToggle.addEventListener('click', () => {
+      const visible = passwordField.type === 'password';
+      passwordField.type = visible ? 'text' : 'password';
+      passwordToggle.setAttribute('aria-pressed', String(visible));
+      passwordToggle.title = visible ? 'Hide password' : 'Show password';
+    });
+  }
+</script>
 </body>
 </html>

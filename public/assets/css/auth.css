@@ -43,7 +43,8 @@
   margin-top: 12px;
 }
 
-.auth input {
+.auth input,
+.auth select {
   width: 100%;
   margin-top: 4px;
   padding: 9px 10px;
@@ -56,6 +57,58 @@
 .auth input.field-error {
   border-color: var(--red);
   box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.2);
+}
+
+.auth-password-field {
+  position: relative;
+  display: block;
+}
+
+.auth .auth-password-field input {
+  padding-right: 44px;
+}
+
+.auth-password-field input::-ms-reveal {
+  display: none;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.auth-password-toggle[hidden],
+.auth-password-toggle[aria-pressed="false"] .auth-password-slash {
+  display: none;
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.auth .notice.error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #b91c1c;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #991b1b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .msg {

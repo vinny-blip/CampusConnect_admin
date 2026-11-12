@@ -2,6 +2,35 @@
    Dashboard Features (Feeds, Insights, Charts, Users, About & Support)
    ========================================================================== */
 
+.moderator-account-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.moderator-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.moderator-remove summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.moderator-remove p {
+  margin: 8px 0;
+  max-width: 220px;
+  white-space: normal;
+}
+
+@media (max-width: 800px) {
+  .moderator-account-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Feed Cards */
 .card {
   display: grid;

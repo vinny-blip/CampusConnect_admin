@@ -17,22 +17,31 @@
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="home.php"><img src="assets/images/campusLogo.png" alt="">CampusConnect</a>
+      <?php if (($user['role'] ?? '') !== 'admin'): ?>
       <form class="searchform" action="search.php" method="get" role="search">
         <input id="search" class="search" name="q" type="search" placeholder="Search CampusConnect" aria-label="Search CampusConnect" value="<?= h($_GET['q'] ?? '') ?>">
       </form>
-      <div class="top-actions">
+      <?php endif; ?>
+      <div class="top-actions"<?= ($user['role'] ?? '') === 'admin' ? ' style="margin-left:auto"' : '' ?>>
+        <?php if (($user['role'] ?? '') !== 'admin'): ?>
         <a class="icon-btn" href="notifications.php" aria-label="Notifications<?= $noteCount ? ', ' . (int)$noteCount . ' unread' : '' ?>" title="Notifications">
           <?= icon_svg('bell') ?><span class="badge<?= $noteCount ? ' has-unread' : '' ?>" data-unread="<?= (int)$noteCount ?>" aria-live="polite"><?= $noteCount ?: '' ?></span>
         </a>
+        <?php endif; ?>
         <a class="avatar<?= !empty($user['profile_image']) ? ' profile-image' : '' ?>" href="profile.php" aria-label="Profile" title="<?= h($user['name']) ?>"><?php if (!empty($user['profile_image'])): ?><img src="<?= h($user['profile_image']) ?>" alt=""><?php else: ?><?= h(initials($user['name'])) ?><?php endif; ?></a>
       </div>
     </header>
     <div class="body">
       <nav class="sidebar" aria-label="Main">
         <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Overview</a>
+        <?php if (($user['role'] ?? '') === 'admin'): ?>
+        <a class="<?= $page === 'logs' ? 'on' : '' ?>" href="logs.php"><span class="ico"><?= icon_svg('history') ?></span>Moderator Logs</a>
+        <a class="<?= $page === 'restricted' ? 'on' : '' ?>" href="restricted.php"><span class="ico"><?= icon_svg('users') ?></span>Restrictions</a>
+        <?php else: ?>
         <a class="<?= in_array($page, ['control', 'posts', 'comments', 'reported', 'removed', 'dismissed', 'post', 'restricted'], true) ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Feed</a>
         <a class="<?= $page === 'users' || $page === 'user' ? 'on' : '' ?>" href="users.php"><span class="ico"><?= icon_svg('users') ?></span>Users</a>
         <a class="<?= $page === 'logs' ? 'on' : '' ?>" href="logs.php"><span class="ico"><?= icon_svg('history') ?></span>Logs</a>
+        <?php endif; ?>
         <form class="logout-form" method="post" action="<?= h($page) ?>.php">
           <?= $csrf ?>
           <input type="hidden" name="action" value="logout">
@@ -47,7 +56,8 @@
               'dismissed' => 'Dismissed',
           ];
           $shortPages = ['post' => 'Posts'];
-          $tabSet = in_array($page, ['posts', 'comments', 'restricted', 'reported', 'removed', 'dismissed', 'control', 'post'], true);
+          $tabSet = ($user['role'] ?? '') !== 'admin'
+              && in_array($page, ['posts', 'comments', 'restricted', 'reported', 'removed', 'dismissed', 'control', 'post'], true);
           if ($tabSet):
         ?>
           <nav class="tabs" aria-label="Moderation">
@@ -177,6 +187,34 @@
       document.addEventListener('visibilitychange', refreshExpiredSuspensions);
       window.setInterval(refreshExpiredSuspensions, 15000);
       refreshExpiredSuspensions();
+    }
+
+    const moderatorAccountsPage = document.querySelector('[data-moderator-accounts-page]');
+    if (moderatorAccountsPage) {
+      const refreshModeratorAccounts = async () => {
+        if (document.visibilityState !== 'visible') return;
+        try {
+          const response = await fetch('home.php?moderator_poll=1', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error(`Moderator status check failed (${response.status}).`);
+          const data = await response.json();
+          if (!Array.isArray(data.moderators)) throw new Error('Moderator status check returned invalid data.');
+          const rows = document.querySelectorAll('[data-moderator-row]');
+          const statuses = new Map(data.moderators.map((moderator) => [String(moderator.id), moderator.suspended]));
+          if (rows.length !== statuses.size || Array.from(rows).some((row) =>
+            !statuses.has(row.dataset.moderatorRow)
+            || statuses.get(row.dataset.moderatorRow) !== (row.dataset.suspended === '1')
+          )) window.location.reload();
+        } catch (error) {
+          console.error('Unable to check moderator account statuses.', error);
+        }
+      };
+      document.addEventListener('visibilitychange', refreshModeratorAccounts);
+      window.setInterval(refreshModeratorAccounts, 15000);
+      refreshModeratorAccounts();
     }
 
     const suspensionDialog = document.querySelector('[data-suspension-dialog]');

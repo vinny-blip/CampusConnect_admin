@@ -55,10 +55,19 @@ final class PageController
     public function run(): void
     {
         $this->user = isset($_SESSION['user_id'])
-            ? $this->users->findById((int)$_SESSION['user_id'])
+            ? $this->users->findById((int)$_SESSION['user_id'], (string)($_SESSION['user_role'] ?? 'moderator'))
             : null;
+        if ($this->user !== null && $this->user['role'] === 'moderator'
+            && (!(isset($_SESSION['moderator_session_id']))
+                || !(new ModeratorAccountModel($this->db))->sessionActive(
+                    (int)$_SESSION['moderator_session_id'],
+                    (int)$this->user['id']
+                ))) {
+            $this->user = null;
+        }
         if (isset($_SESSION['user_id']) && $this->user === null) {
-            unset($_SESSION['user_id']);
+            unset($_SESSION['user_id'], $_SESSION['user_role'], $_SESSION['moderator_session_id']);
+            $this->flash('Your session ended. Please sign in again.', 'error');
         }
 
         if (in_array($this->page, ['login', 'register'], true)) {
@@ -68,7 +77,7 @@ final class PageController
         } elseif ($this->user === null) {
             $this->redirect('login.php');
         } else {
-            $this->initializeModels((int)$this->user['id']);
+            $this->initializeModels((int)$this->user['id'], (string)$this->user['role']);
             if ($this->page === 'overview') {
                 $this->redirect('control.php');
             }
@@ -78,11 +87,29 @@ final class PageController
             http_response_code(403);
             exit('Only the admin can manage moderator restrictions.');
         }
+        if (($this->user['role'] ?? '') === 'admin'
+            && !in_array($this->page, ['home', 'logs', 'profile', 'restricted'], true)) {
+            http_response_code(403);
+            exit('This page is not available in the Admin dashboard.');
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->handlePost();
         }
-        if ($this->page === 'logs' && isset($_GET['poll'])) {
+        if ($this->page === 'home' && ($this->user['role'] ?? '') === 'admin' && isset($_GET['moderator_poll'])) {
+            $moderators = (new ModeratorAccountModel($this->db))->list();
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['moderators' => array_map(
+                static fn(array $moderator): array => [
+                    'id' => (int)$moderator['id'],
+                    'suspended' => (bool)$moderator['suspended'],
+                ],
+                $moderators
+            )], JSON_THROW_ON_ERROR);
+            exit;
+        }
+        if ($this->page === 'logs' && ($this->user['role'] ?? '') !== 'admin' && isset($_GET['poll'])) {
             // Send refreshed counts and session rows to the Logs page.
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
@@ -110,7 +137,9 @@ final class PageController
             ], JSON_THROW_ON_ERROR);
             exit;
         }
-        $this->syncAiFlaggedPostNotifications();
+        if (($this->user['role'] ?? '') !== 'admin') {
+            $this->syncAiFlaggedPostNotifications();
+        }
         if ($this->page === 'notifications' && isset($_GET['poll'])) {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['unread' => $this->notifications->unread()], JSON_THROW_ON_ERROR);
@@ -143,13 +172,13 @@ final class PageController
     }
 
     /** Creates the data models used by authenticated dashboard pages. */
-    private function initializeModels(int $userId): void
+    private function initializeModels(int $userId, string $role): void
     {
-        $this->posts = new PostModel($this->db, $userId);
-        $this->notifications = new NotificationModel($this->db, $userId);
+        $this->posts = new PostModel($this->db, $userId, $role);
+        $this->notifications = new NotificationModel($this->db, $userId, $role);
         $this->restricted = new RestrictedModel($this->db);
         $this->aiModeration = new AiModerationModel($this->db);
-        $this->mobile = new MobileModerationModel($this->db, $userId);
+        $this->mobile = new MobileModerationModel($this->db, $userId, $role);
     }
 
     /** Creates the login-log model only when the Logs page needs it. */
@@ -211,13 +240,28 @@ final class PageController
         if ($this->page === 'login' && $action === 'login') {
             $email = mb_strtolower(trim((string)($_POST['email'] ?? '')));
             $password = (string)($_POST['password'] ?? '');
-            $user = $this->users->login($email, $password);
+            $role = (string)($_POST['role'] ?? '');
+            if ($role === 'moderator') {
+                (new ModeratorAccountModel($this->db))->restoreExpiredSuspensions();
+            }
+            $user = $this->users->login($email, $password, $role);
             if ($user === null) {
-                $this->flash('Wrong email or password.', 'error');
+                $this->flash('Wrong email, password, or role.', 'error');
+                $this->redirect('login.php');
+            }
+            $moderatorSessionId = $user['role'] === 'moderator'
+                ? (new ModeratorAccountModel($this->db))->startSession((int)$user['id'])
+                : null;
+            if ($user['role'] === 'moderator' && $moderatorSessionId === null) {
+                $this->flash('Wrong email, password, or role.', 'error');
                 $this->redirect('login.php');
             }
             session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_role'] = $user['role'];
+            if ($moderatorSessionId !== null) {
+                $_SESSION['moderator_session_id'] = $moderatorSessionId;
+            }
             $this->redirect('home.php');
         }
         if ($this->page === 'register' && $action === 'register') {
@@ -230,6 +274,12 @@ final class PageController
             $this->redirect('login.php');
         }
         if ($action === 'logout') {
+            if (($this->user['role'] ?? '') === 'moderator' && isset($_SESSION['moderator_session_id'])) {
+                (new ModeratorAccountModel($this->db))->endSession(
+                    (int)$_SESSION['moderator_session_id'],
+                    (int)$this->user['id']
+                );
+            }
             $_SESSION = [];
             if (ini_get('session.use_cookies')) {
                 $params = session_get_cookie_params();
@@ -240,6 +290,26 @@ final class PageController
         }
         if ($this->user === null) {
             $this->redirect('login.php');
+        }
+
+        if ($this->user['role'] === 'admin' && $this->page === 'home') {
+            $moderators = new ModeratorAccountModel($this->db);
+            $moderatorId = (int)($_POST['moderator_id'] ?? 0);
+            if ($action === 'suspend-moderator' || $action === 'restore-moderator') {
+                $suspended = $action === 'suspend-moderator';
+                $changed = $moderators->setSuspended($moderatorId, $suspended, $suspended ? $this->suspensionDeadline() : null);
+                $message = $changed
+                    ? ($action === 'suspend-moderator' ? 'Moderator suspended.' : 'Moderator restored.')
+                    : 'Moderator was not found or already has that status.';
+            } elseif ($action === 'remove-moderator') {
+                $changed = $moderators->remove($moderatorId);
+                $message = $changed ? 'Moderator account removed.' : 'Moderator account was not found.';
+            } else {
+                http_response_code(400);
+                exit('Unsupported form action.');
+            }
+            $this->flash($message, $changed ? 'success' : 'error');
+            $this->redirect('home.php');
         }
 
         $allowedActions = match (true) {
@@ -315,34 +385,8 @@ final class PageController
                 $suspendedUntil = null;
                 $suspensionTimezoneOffset = null;
                 if ($status === 'suspended') {
-                    $submittedDateTime = (string)($_POST['suspended_until'] ?? '');
-                    $suspensionTimezoneOffset = filter_var(
-                        $_POST['suspension_timezone_offset'] ?? null,
-                        FILTER_VALIDATE_INT
-                    );
-                    $suspensionTimezoneOffset = $suspensionTimezoneOffset === false ? null : $suspensionTimezoneOffset;
-                    if ($suspensionTimezoneOffset === null || abs($suspensionTimezoneOffset) > 840) {
-                        $this->flash('The browser time zone could not be verified. Refresh the page and try again.', 'error');
-                        $this->redirect($this->returnUrl());
-                    }
-                    $offsetFromUtc = -$suspensionTimezoneOffset;
-                    $offset = sprintf(
-                        '%s%02d:%02d',
-                        $offsetFromUtc >= 0 ? '+' : '-',
-                        intdiv(abs($offsetFromUtc), 60),
-                        abs($offsetFromUtc) % 60
-                    );
-                    $parsedDateTime = DateTimeImmutable::createFromFormat(
-                        '!Y-m-d\TH:iP',
-                        $submittedDateTime . $offset
-                    );
-                    if ($parsedDateTime === false
-                        || $parsedDateTime->format('Y-m-d\TH:i') !== $submittedDateTime
-                        || $parsedDateTime <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
-                        $this->flash('Choose a suspension lift date and time in the future.', 'error');
-                        $this->redirect($this->returnUrl());
-                    }
-                    $suspendedUntil = $parsedDateTime->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+                    $suspendedUntil = $this->suspensionDeadline();
+                    $suspensionTimezoneOffset = (int)$_POST['suspension_timezone_offset'];
                 }
                 $updated = $this->mobile->setUserStatus(
                     (int)($_POST['user_id'] ?? 0),
@@ -374,18 +418,7 @@ final class PageController
             $this->redirect($this->returnUrl());
         }
 
-        $postId = (int)($_POST['post_id'] ?? ($this->page === 'post' ? ($_GET['id'] ?? 0) : 0));
-        if (in_array($action, ['approve', 'remove', 'delete-post'], true)) {
-            $post = $this->posts->get($postId);
-            $this->requireAdminForAiReview(!empty($post['aiNeedsReview']));
-        }
-        if (in_array($action, ['delete-comment', 'hide-comment', 'restore-comment'], true)) {
-            $this->requireAdminForAiReview(
-                $this->posts->commentNeedsAiReview($postId, (int)($_POST['comment_id'] ?? 0))
-            );
-        }
-
-        if ($action === 'comment'
+        if ($action === 'comment' && $this->user['role'] === 'moderator'
             && $this->restricted->isRestricted((int)$this->user['id'])) {
             $this->flash('Your account is restricted from posting and commenting.', 'error');
             $this->redirect($this->returnUrl());
@@ -432,15 +465,6 @@ final class PageController
         } elseif ($action === 'remove') {
             $result = $this->posts->setStatus($id, 'removed', $this->user['name']);
             $this->flash($result['error'] ?? 'Post removed.', isset($result['error']) ? 'error' : 'success');
-        }
-    }
-
-    /** Prevents non-admin users from changing the AI moderation review setting. */
-    private function requireAdminForAiReview(bool $needsReview): void
-    {
-        if ($needsReview && ($this->user['role'] ?? '') !== 'admin') {
-            http_response_code(403);
-            exit('Only the admin can decide AI-flagged content.');
         }
     }
 
@@ -500,8 +524,8 @@ final class PageController
                 $this->flash($message, 'error');
             } elseif (!empty($aiReview['needsReview'])) {
                 $this->flash(!empty($aiReview['available'])
-                    ? 'Comment held for admin review after an AI flag.'
-                    : 'AI check unavailable. Comment held for admin review.');
+                    ? 'Comment held for moderator review after an AI flag.'
+                    : 'AI check unavailable. Comment held for moderator review.');
             } elseif (isset($_GET['reply'])) {
                 $this->redirect('post.php?id=' . $id . (isset($_GET['review']) ? '&review=1' : ''));
             }
@@ -524,10 +548,10 @@ final class PageController
     private function handleProfileAction(string $action): void
     {
         if ($action === 'update-name') {
-            if (!$this->users->updateName((int)$this->user['id'], (string)($_POST['name'] ?? ''))) {
+            if (!$this->users->updateName((int)$this->user['id'], (string)($_POST['name'] ?? ''), $this->user['role'])) {
                 $this->flash('Name cannot be empty.', 'error');
             } else {
-                $this->user = $this->users->findById((int)$this->user['id']);
+                $this->user = $this->users->findById((int)$this->user['id'], $this->user['role']);
                 $this->flash('Profile updated.');
             }
         } elseif ($action === 'update-profile-picture') {
@@ -541,7 +565,8 @@ final class PageController
             } elseif (!$this->users->changePassword(
                 (int)$this->user['id'],
                 (string)($_POST['current_password'] ?? ''),
-                $newPassword
+                $newPassword,
+                $this->user['role']
             )) {
                 $this->flash('Current password is incorrect.', 'error');
             } else {
@@ -612,8 +637,8 @@ final class PageController
         $previousPath = (string)($this->user['profile_image'] ?? '');
         $relativePath = 'uploads/profile/' . $filename;
         try {
-            $this->users->updateProfileImage((int)$this->user['id'], $relativePath);
-            $this->user = $this->users->findById((int)$this->user['id']);
+            $this->users->updateProfileImage((int)$this->user['id'], $relativePath, $this->user['role']);
+            $this->user = $this->users->findById((int)$this->user['id'], $this->user['role']);
         } catch (PDOException $exception) {
             if (is_file($destination) && !unlink($destination)) {
                 error_log('Unable to remove unsaved profile image: ' . $destination);
@@ -644,6 +669,31 @@ final class PageController
             $this->restricted->remove((int)($_POST['user_id'] ?? 0));
             $this->flash('Moderator can post and comment again.');
         }
+    }
+
+    private function suspensionDeadline(): string
+    {
+        $submittedDateTime = (string)($_POST['suspended_until'] ?? '');
+        $timezoneOffset = filter_var($_POST['suspension_timezone_offset'] ?? null, FILTER_VALIDATE_INT);
+        if ($timezoneOffset === false || abs($timezoneOffset) > 840) {
+            $this->flash('The browser time zone could not be verified. Refresh the page and try again.', 'error');
+            $this->redirect($this->returnUrl());
+        }
+        $offsetFromUtc = -$timezoneOffset;
+        $offset = sprintf(
+            '%s%02d:%02d',
+            $offsetFromUtc >= 0 ? '+' : '-',
+            intdiv(abs($offsetFromUtc), 60),
+            abs($offsetFromUtc) % 60
+        );
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d\TH:iP', $submittedDateTime . $offset);
+        if ($parsed === false
+            || $parsed->format('Y-m-d\TH:i') !== $submittedDateTime
+            || $parsed <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+            $this->flash('Choose a suspension lift date and time in the future.', 'error');
+            $this->redirect($this->returnUrl());
+        }
+        return $parsed->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
     }
 
     /** Builds view data with the page-specific data builder. */

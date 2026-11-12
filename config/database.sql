@@ -4,17 +4,46 @@ CREATE DATABASE IF NOT EXISTS campusconnect
 
 USE campusconnect;
 
--- Stores dashboard administrator and moderator accounts.
+-- Stores student moderator accounts.
 CREATE TABLE IF NOT EXISTS admin_users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin', 'moderator') NOT NULL DEFAULT 'moderator',
+  suspended TINYINT(1) NOT NULL DEFAULT 0,
+  suspended_until DATETIME NULL,
   profile_image VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY admin_users_email_unique (email)
+) ENGINE=InnoDB;
+
+-- Keeps moderator login history even if an account is removed.
+CREATE TABLE IF NOT EXISTS superadmin_moderator_login_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  moderator_id BIGINT UNSIGNED NULL,
+  moderator_name VARCHAR(120) NOT NULL,
+  moderator_email VARCHAR(254) NOT NULL,
+  login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  logout_at DATETIME NULL,
+  end_reason ENUM('logout', 'suspended', 'removed') NULL,
+  PRIMARY KEY (id),
+  KEY superadmin_moderator_log_user (moderator_id, logout_at),
+  KEY superadmin_moderator_log_time (login_at),
+  CONSTRAINT superadmin_moderator_log_user_fk FOREIGN KEY (moderator_id) REFERENCES admin_users (id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Stores separately provisioned administrator accounts.
+CREATE TABLE IF NOT EXISTS superadmin_users (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  email VARCHAR(254) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  profile_image VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY superadmin_users_email_unique (email)
 ) ENGINE=InnoDB;
 
 -- Records mobile-app login, activity, and logout times for the dashboard Logs page.
@@ -44,6 +73,16 @@ CREATE TABLE IF NOT EXISTS admin_app_state (
   CONSTRAINT admin_app_state_user_fk FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Keeps administrator state separate even when account IDs overlap.
+CREATE TABLE IF NOT EXISTS superadmin_app_state (
+  user_id BIGINT UNSIGNED NOT NULL,
+  state_key VARCHAR(40) NOT NULL,
+  state_data LONGTEXT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, state_key),
+  CONSTRAINT superadmin_app_state_user_fk FOREIGN KEY (user_id) REFERENCES superadmin_users (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- Records which one-time database migrations have already run.
 CREATE TABLE IF NOT EXISTS admin_system_migrations (
   migration_key VARCHAR(100) NOT NULL,
@@ -54,12 +93,14 @@ CREATE TABLE IF NOT EXISTS admin_system_migrations (
 -- Tracks moderators restricted by an administrator and the reason.
 CREATE TABLE IF NOT EXISTS admin_user_restrictions (
   user_id BIGINT UNSIGNED NOT NULL,
-  restricted_by BIGINT UNSIGNED NOT NULL,
+  restricted_by BIGINT UNSIGNED NULL,
+  superadmin_restricted_by BIGINT UNSIGNED NULL,
   reason VARCHAR(500) NOT NULL,
   created_at BIGINT NOT NULL,
   PRIMARY KEY (user_id),
   CONSTRAINT admin_user_restrictions_user_fk FOREIGN KEY (user_id) REFERENCES admin_users (id) ON DELETE CASCADE,
-  CONSTRAINT admin_user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE
+  CONSTRAINT admin_user_restrictions_admin_fk FOREIGN KEY (restricted_by) REFERENCES admin_users (id) ON DELETE CASCADE,
+  CONSTRAINT admin_user_restrictions_superadmin_fk FOREIGN KEY (superadmin_restricted_by) REFERENCES superadmin_users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Stores whether AI moderation is enabled in the dashboard.
@@ -80,6 +121,7 @@ CREATE TABLE IF NOT EXISTS admin_mobile_post_moderation (
   ai_flagged TINYINT(1) NOT NULL DEFAULT 0,
   ai_categories VARCHAR(1000) NULL,
   moderated_by BIGINT UNSIGNED NULL,
+  moderated_by_role ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator',
   moderated_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX admin_mobile_post_status (status),
@@ -101,6 +143,7 @@ CREATE TABLE IF NOT EXISTS admin_removed_mobile_posts (
   ai_categories VARCHAR(1000) NULL,
   reason VARCHAR(500) NULL,
   removed_by BIGINT UNSIGNED NULL,
+  removed_by_role ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator',
   removed_by_name VARCHAR(120) NULL,
   post_created_at TIMESTAMP NULL,
   removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -122,6 +165,7 @@ CREATE TABLE IF NOT EXISTS admin_removed_mobile_comments (
   ai_categories VARCHAR(1000) NULL,
   reason VARCHAR(500) NULL,
   removed_by BIGINT UNSIGNED NULL,
+  removed_by_role ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator',
   removed_by_name VARCHAR(120) NULL,
   comment_created_at TIMESTAMP NULL,
   removed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -138,6 +182,7 @@ CREATE TABLE IF NOT EXISTS admin_mobile_comment_moderation (
   ai_flagged TINYINT(1) NOT NULL DEFAULT 0,
   ai_categories VARCHAR(1000) NULL,
   moderated_by BIGINT UNSIGNED NULL,
+  moderated_by_role ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator',
   moderated_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX admin_mobile_comment_status (status),
@@ -167,6 +212,7 @@ CREATE TABLE IF NOT EXISTS admin_mobile_user_moderation (
   suspension_timezone_offset SMALLINT NULL,
   reason VARCHAR(500) NULL,
   moderated_by BIGINT UNSIGNED NULL,
+  moderated_by_role ENUM('moderator', 'admin') NOT NULL DEFAULT 'moderator',
   moderated_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX admin_mobile_user_status (status)

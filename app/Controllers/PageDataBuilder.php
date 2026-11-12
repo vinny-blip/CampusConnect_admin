@@ -31,6 +31,19 @@ final class PageDataBuilder
             return [];
         }
 
+        if (($user['role'] ?? '') === 'admin') {
+            $data = ['user' => $user, 'noteCount' => 0];
+            $moderators = new ModeratorAccountModel($this->db);
+            if ($this->page === 'home') {
+                $data['moderators'] = $moderators->list();
+            } elseif ($this->page === 'logs') {
+                $data['moderatorSessions'] = $moderators->recentSessions();
+            } elseif ($this->page === 'restricted') {
+                $data['restrictedUsers'] = $this->restricted->list();
+            }
+            return $data;
+        }
+
         $data = [
             'user' => $user,
             'noteCount' => $this->notifications->unread(),

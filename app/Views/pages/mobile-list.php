@@ -42,8 +42,8 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     </button>
   </form>
   </div>
-  <p class="sub ai-moderation-note">When enabled, AI-flagged or unchecked content is held for admin review. The AI never removes content.</p>
-  <?php if ($aiModerationEnabled && !$aiModerationConfigured): ?><p class="notice error" role="status">OPENAI_API_KEY is not configured. New content will be held for admin review until the API is available.</p><?php endif; ?>
+  <p class="sub ai-moderation-note">When enabled, AI-flagged or unchecked content is held for moderator review. The AI never removes content.</p>
+  <?php if ($aiModerationEnabled && !$aiModerationConfigured): ?><p class="notice error" role="status">OPENAI_API_KEY is not configured. New content will be held for moderator review until the API is available.</p><?php endif; ?>
 <?php endif; ?>
 <?php if (!$mobileAvailable): ?>
   <p class="empty">The mobile schema is not available in this database. Import the mobile schema, then reload.</p>
@@ -324,7 +324,7 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
           </div>
         </dl>
         </a>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>"><?php if ($item['moderation_status'] === 'active'): ?><button class="btn-action remove" type="button" data-open-suspension data-user-id="<?= (int)$item['id'] ?>">Suspend</button><button class="btn-action ban" name="action" value="mobile-ban-user" onclick="return confirm('Ban this user?')">Banned</button><?php else: ?><button class="btn-action approve" name="action" value="mobile-restore-user"><?= $item['moderation_status'] === 'banned' ? 'Unban' : 'Restore' ?></button><?php endif; ?></form>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>"><?php if ($item['moderation_status'] === 'active'): ?><button class="btn-action remove" type="button" data-open-suspension data-user-id="<?= (int)$item['id'] ?>">Suspend</button><button class="btn-action ban" name="action" value="mobile-ban-user" onclick="return confirm('Ban this user?')">Ban</button><?php else: ?><button class="btn-action approve" name="action" value="mobile-restore-user"><?= $item['moderation_status'] === 'banned' ? 'Unban' : 'Restore' ?></button><?php endif; ?></form>
       </div>
     <?php endforeach; ?>
     <?php if (!$mobileUsers): ?><p class="empty">No users match this filter.</p><?php endif; ?>
@@ -411,60 +411,11 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     </div>
   <?php endif; ?>
   <?php if ($isUsers): ?>
-    <dialog class="suspension-dialog" data-suspension-dialog aria-labelledby="suspension-dialog-title">
-      <form method="post" class="suspension-dialog-form">
-        <?= $csrf ?>
-        <input type="hidden" name="action" value="mobile-suspend-user">
-        <input type="hidden" name="user_id" value="" data-suspension-user-id>
-        <input type="hidden" name="suspended_until" value="" data-suspension-value>
-        <input type="hidden" name="suspension_timezone_offset" value="" data-suspension-timezone>
-        <header class="suspension-dialog-heading">
-          <span class="suspension-dialog-icon" aria-hidden="true">!</span>
-          <div>
-            <h3 id="suspension-dialog-title">Suspend user</h3>
-            <p>Choose when this account can return.</p>
-          </div>
-        </header>
-        <section class="suspension-calendar" aria-label="Choose suspension end date">
-          <div class="suspension-calendar-heading">
-            <button class="calendar-nav" type="button" aria-label="Previous month" data-calendar-previous>&lsaquo;</button>
-            <strong data-calendar-month></strong>
-            <button class="calendar-nav" type="button" aria-label="Next month" data-calendar-next>&rsaquo;</button>
-          </div>
-          <div class="suspension-weekdays" aria-hidden="true">
-            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-          </div>
-          <div class="suspension-calendar-days" role="group" aria-label="Calendar dates" data-calendar-days></div>
-        </section>
-        <section class="suspension-time" aria-label="Choose suspension end time">
-          <label>Lift time</label>
-          <div class="suspension-time-controls">
-            <select aria-label="Hour" data-suspension-hour>
-              <option value="">Hour</option>
-              <?php for ($hour = 1; $hour <= 12; $hour++): ?>
-                <option value="<?= $hour ?>"><?= sprintf('%02d', $hour) ?></option>
-              <?php endfor; ?>
-            </select>
-            <span>:</span>
-            <select aria-label="Minute" data-suspension-minute>
-              <option value="">Min</option>
-              <?php for ($minute = 0; $minute < 60; $minute++): ?>
-                <option value="<?= $minute ?>"><?= sprintf('%02d', $minute) ?></option>
-              <?php endfor; ?>
-            </select>
-            <select aria-label="AM or PM" data-suspension-period>
-              <option value="">AM/PM</option>
-              <option value="AM">AM</option>
-              <option value="PM">PM</option>
-            </select>
-          </div>
-        </section>
-        <p class="suspension-selection" aria-live="polite" tabindex="-1" data-suspension-selection>Select a date and time.</p>
-        <div class="suspension-dialog-actions">
-          <button class="btn-action secondary" type="button" data-close-suspension>Cancel</button>
-          <button class="btn-action remove" type="submit" data-suspension-submit disabled>Confirm suspension</button>
-        </div>
-      </form>
-    </dialog>
+    <?php
+      $suspensionAction = 'mobile-suspend-user';
+      $suspensionIdName = 'user_id';
+      $suspensionTitle = 'Suspend user';
+      require dirname(__DIR__) . '/partials/suspension-dialog.php';
+    ?>
   <?php endif; ?>
 <?php endif; ?>

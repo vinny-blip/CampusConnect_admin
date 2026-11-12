@@ -54,7 +54,7 @@ final class RestrictedModel
         }
 
         $statement = $this->db->prepare(
-            'INSERT INTO admin_user_restrictions (user_id, restricted_by, reason, created_at) VALUES (?, ?, ?, ?)'
+            'INSERT INTO admin_user_restrictions (user_id, superadmin_restricted_by, reason, created_at) VALUES (?, ?, ?, ?)'
         );
         $statement->execute([(int)$userId, $adminId, $reason, (int)(microtime(true) * 1000)]);
         return null;

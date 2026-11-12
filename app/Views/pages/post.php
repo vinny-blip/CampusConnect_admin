@@ -12,11 +12,9 @@
       <?php else: ?><span>• Removal date unavailable</span><?php endif; ?>
     <?php endif; ?>
     <?php if ($post['reported']): ?><span class="flag">• Reported: <?= h($post['reportReason']) ?><?= $post['reportedAt'] !== null ? ' on ' . h(date_label((int)$post['reportedAt'])) : '' ?></span><?php endif; ?>
-    <?php if ($post['aiNeedsReview']): ?><span class="flag">• <?= $post['aiReviewError'] ? 'AI check unavailable; held for admin review' : 'AI flagged for admin review' ?><?= $post['aiCategories'] ? ': ' . h(implode(', ', $post['aiCategories'])) : '' ?></span><?php endif; ?>
+    <?php if ($post['aiNeedsReview']): ?><span class="flag">• <?= $post['aiReviewError'] ? 'AI check unavailable; held for moderator review' : 'AI flagged for moderator review' ?><?= $post['aiCategories'] ? ': ' . h(implode(', ', $post['aiCategories'])) : '' ?></span><?php endif; ?>
     <span class="grow"></span>
-    <?php if ($post['aiNeedsReview'] && ($user['role'] ?? '') !== 'admin'): ?>
-      <span class="tag pending">Waiting for admin</span>
-    <?php elseif ($post['status'] === 'pending'): ?>
+    <?php if ($post['status'] === 'pending'): ?>
       <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="approve"><button class="button primary">Approve</button></form>
       <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="remove"><button class="button danger">Hide post</button></form>
     <?php elseif ($post['status'] === 'approved'): ?>
@@ -69,11 +67,9 @@
             <div><?= $comment['hidden'] ? '<em>Comment hidden by a moderator.</em>' : h($comment['text']) ?></div>
             <?php if ($comment['hidden']): ?>
               <?php if ($comment['aiNeedsReview']): ?>
-                <p class="flag"><?= $comment['aiReviewError'] ? 'AI check unavailable; held for admin review' : 'AI flagged for admin review' ?><?= $comment['aiCategories'] ? ': ' . h(implode(', ', $comment['aiCategories'])) : '' ?></p>
-                <a href="comments.php">Review AI-held comments</a>
-              <?php else: ?>
-                <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="restore-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Restore comment</button></form>
+                <p class="flag"><?= $comment['aiReviewError'] ? 'AI check unavailable; held for moderator review' : 'AI flagged for moderator review' ?><?= $comment['aiCategories'] ? ': ' . h(implode(', ', $comment['aiCategories'])) : '' ?></p>
               <?php endif; ?>
+              <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="restore-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Restore comment</button></form>
             <?php elseif ($comment['reported']): ?><p class="flag">Reported: <?= h($comment['reportReason']) ?><?= $comment['reportedAt'] !== null ? ' on ' . h(date_label((int)$comment['reportedAt'])) : '' ?></p>
               <div class="comment-moderation">
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="clear-comment-report"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="linkbtn">Dismiss report</button></form>
@@ -86,12 +82,10 @@
                 <form class="inline-action" method="post"><?= $csrf ?><input type="hidden" name="action" value="heart-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button><?= icon_svg('heart') ?> <?= (int)$comment['hearts'] ?></button></form>
                 <?php if (!$post['locked'] && $post['status'] === 'approved'): ?><a href="post.php?id=<?= (int)$post['id'] ?>&amp;reply=<?= rawurlencode($comment['author']) ?>#comment-form">Reply</a><?php endif; ?>
               <?php endif; ?>
-              <?php if (!$comment['aiNeedsReview'] || ($user['role'] ?? '') === 'admin'): ?>
-                <form class="inline-action" method="post" onsubmit="return confirm('Permanently delete this comment?')">
-                  <?= $csrf ?><input type="hidden" name="action" value="delete-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>">
-                  <button class="linkbtn danger-text" type="submit">Remove</button>
-                </form>
-              <?php endif; ?>
+              <form class="inline-action" method="post" onsubmit="return confirm('Permanently delete this comment?')">
+                <?= $csrf ?><input type="hidden" name="action" value="delete-comment"><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>">
+                <button class="linkbtn danger-text" type="submit">Remove</button>
+              </form>
             </div>
           </div>
         <?php endforeach; else: ?><p class="empty">No comments yet.</p><?php endif; ?>
