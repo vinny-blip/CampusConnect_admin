@@ -36,22 +36,89 @@ final class UserModel
         return $user ? $this->withRole($user) : null;
     }
 
-    /** Verifies the password and selected role against the dashboard account. */
+    /** Verifies a permanent or unexpired temporary password for the selected role. */
     public function login(string $email, string $password, string $role): ?array
     {
-        if (!in_array($role, ['moderator', 'admin'], true)) {
+        if (!in_array($role, ['admin', 'moderator'], true)) {
             return null;
         }
+        $table = $this->accountTable($role);
         $sql = $role === 'admin'
-            ? "SELECT id, name, email, password_hash, 'admin' AS role FROM superadmin_users WHERE email = ?"
-            : "SELECT id, name, email, password_hash, role FROM admin_users WHERE email = ? AND role = 'moderator' AND suspended = 0";
+            ? "SELECT id, name, email, password_hash, temp_password_hash, temp_password_expires_at, temp_password_attempts, 'admin' AS role FROM {$table} WHERE email = ?"
+            : "SELECT id, name, email, password_hash, temp_password_hash, temp_password_expires_at, temp_password_attempts, role FROM {$table} WHERE email = ? AND role = 'moderator' AND suspended = 0";
         $statement = $this->db->prepare($sql);
         $statement->execute([mb_strtolower(trim($email))]);
         $user = $statement->fetch();
-        if (!$user || !password_verify($password, $user['password_hash']) || $user['role'] !== $role) {
+        if (!$user) {
             return null;
         }
-        return $this->withRole($user);
+
+        $permanentPasswordMatches = password_verify($password, $user['password_hash']);
+        $temporaryPasswordMatches = $this->temporaryPasswordMatches($password, $user);
+        if (!$permanentPasswordMatches && !$temporaryPasswordMatches) {
+            $this->incrementTemporaryPasswordAttempts($table, (int)$user['id'], $user);
+            return null;
+        }
+        if ($permanentPasswordMatches) {
+            $this->clearTemporaryPassword($table, (int)$user['id']);
+        }
+
+        $user = $this->withRole($user);
+        $user['temporary_password_login'] = $temporaryPasswordMatches;
+        return $user;
+    }
+
+    /** Emails a short-lived temporary password without revealing whether an account exists. */
+    public function sendTemporaryPassword(string $email, string $role): void
+    {
+        if (!in_array($role, ['admin', 'moderator'], true)) {
+            throw new InvalidArgumentException('Invalid dashboard role.');
+        }
+        $table = $this->accountTable($role);
+        $sql = $role === 'admin'
+            ? "SELECT id, email, temp_password_sent_at FROM {$table} WHERE email = ?"
+            : "SELECT id, email, temp_password_sent_at FROM {$table} WHERE email = ? AND role = 'moderator' AND suspended = 0";
+        $statement = $this->db->prepare($sql);
+        $statement->execute([mb_strtolower(trim($email))]);
+        $account = $statement->fetch();
+        if (!$account) {
+            return;
+        }
+
+        $sentAt = $account['temp_password_sent_at'] ?? null;
+        $lastSent = is_string($sentAt) ? strtotime($sentAt . ' UTC') : false;
+        if ($lastSent !== false && $lastSent > time() - 60) {
+            return;
+        }
+
+        $temporaryPassword = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $passwordHash = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+        $expiresAt = gmdate('Y-m-d H:i:s', time() + 30 * 60);
+        $sentAt = gmdate('Y-m-d H:i:s');
+        $statement = $this->db->prepare(
+            "UPDATE {$table}
+             SET temp_password_hash = ?, temp_password_expires_at = ?, temp_password_sent_at = ?, temp_password_attempts = 0
+             WHERE id = ?
+               AND (temp_password_sent_at IS NULL
+                    OR temp_password_sent_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE))"
+        );
+        $statement->execute([$passwordHash, $expiresAt, $sentAt, (int)$account['id']]);
+        if ($statement->rowCount() !== 1) {
+            return;
+        }
+
+        $subject = 'CampusConnect temporary password (valid for 30 minutes)';
+        $message = "Your temporary password is: {$temporaryPassword}\n\n"
+            . "It is valid for 30 minutes. Log in using the selected account role, then change your password in Profile.";
+        $headers = "From: noreply@campusconnect.uslsbsit.com\r\nContent-Type: text/plain; charset=UTF-8";
+        if (!filter_var((string)$account['email'], FILTER_VALIDATE_EMAIL)
+            || !mail((string)$account['email'], $subject, $message, $headers)) {
+            $this->db->prepare(
+                "UPDATE {$table} SET temp_password_hash = NULL, temp_password_expires_at = NULL, temp_password_attempts = 0
+                 WHERE id = ? AND temp_password_hash = ?"
+            )->execute([(int)$account['id'], $passwordHash]);
+            error_log('[CampusConnect password recovery] Temporary password email could not be sent.');
+        }
     }
 
     /** Validates and creates a moderator account from submitted form data. */
@@ -116,14 +183,25 @@ final class UserModel
     public function changePassword(int $id, string $currentPassword, string $newPassword, string $role = 'moderator'): bool
     {
         $table = $this->accountTable($role);
-        $statement = $this->db->prepare("SELECT password_hash FROM {$table} WHERE id = ?");
+        $statement = $this->db->prepare(
+            "SELECT password_hash, temp_password_hash, temp_password_expires_at, temp_password_attempts
+             FROM {$table} WHERE id = ?"
+        );
         $statement->execute([$id]);
-        $passwordHash = $statement->fetchColumn();
-        if (!is_string($passwordHash) || !password_verify($currentPassword, $passwordHash)) {
+        $account = $statement->fetch();
+        if (!$account || (
+            !password_verify($currentPassword, $account['password_hash'])
+            && !$this->temporaryPasswordMatches($currentPassword, $account)
+        )) {
             return false;
         }
 
-        $statement = $this->db->prepare("UPDATE {$table} SET password_hash = ? WHERE id = ?");
+        $statement = $this->db->prepare(
+            "UPDATE {$table}
+             SET password_hash = ?, temp_password_hash = NULL, temp_password_expires_at = NULL,
+                 temp_password_sent_at = NULL, temp_password_attempts = 0
+             WHERE id = ?"
+        );
         $statement->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
         return true;
     }
@@ -137,12 +215,56 @@ final class UserModel
         };
     }
 
+    private function temporaryPasswordMatches(string $password, array $account): bool
+    {
+        $expiry = $account['temp_password_expires_at'] ?? null;
+        $expiresAt = is_string($expiry) ? strtotime($expiry . ' UTC') : false;
+        return is_string($account['temp_password_hash'] ?? null)
+            && $account['temp_password_hash'] !== ''
+            && $expiresAt !== false
+            && $expiresAt >= time()
+            && (int)($account['temp_password_attempts'] ?? 0) < 5
+            && password_verify($password, $account['temp_password_hash']);
+    }
+
+    private function incrementTemporaryPasswordAttempts(string $table, int $id, array $account): void
+    {
+        if (!empty($account['temp_password_hash']) && $this->temporaryPasswordIsUnexpired($account)) {
+            $this->db->prepare(
+                "UPDATE {$table} SET temp_password_attempts = LEAST(temp_password_attempts + 1, 5)
+                 WHERE id = ? AND temp_password_expires_at >= UTC_TIMESTAMP()"
+            )->execute([$id]);
+        }
+    }
+
+    private function temporaryPasswordIsUnexpired(array $account): bool
+    {
+        $expiry = $account['temp_password_expires_at'] ?? null;
+        $expiresAt = is_string($expiry) ? strtotime($expiry . ' UTC') : false;
+        return $expiresAt !== false && $expiresAt >= time();
+    }
+
+    private function clearTemporaryPassword(string $table, int $id): void
+    {
+        $this->db->prepare(
+            "UPDATE {$table}
+             SET temp_password_hash = NULL, temp_password_expires_at = NULL, temp_password_attempts = 0
+             WHERE id = ?"
+        )->execute([$id]);
+    }
+
     /** Normalizes account fields and removes the password hash from results. */
     private function withRole(array $user): array
     {
         $user['id'] = (int)$user['id'];
         $user['role'] = (string)($user['role'] ?? 'moderator');
-        unset($user['password_hash']);
+        unset(
+            $user['password_hash'],
+            $user['temp_password_hash'],
+            $user['temp_password_expires_at'],
+            $user['temp_password_sent_at'],
+            $user['temp_password_attempts']
+        );
         return $user;
     }
 }

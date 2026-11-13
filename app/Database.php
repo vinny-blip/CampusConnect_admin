@@ -68,11 +68,35 @@ final class Database
                     moderator_name VARCHAR(120) NOT NULL,
                     moderator_email VARCHAR(254) NOT NULL,
                     login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_activity_at DATETIME NULL,
                     logout_at DATETIME NULL,
                     end_reason ENUM("logout", "suspended", "removed") NULL,
                     INDEX superadmin_moderator_log_user (moderator_id, logout_at),
                     INDEX superadmin_moderator_log_time (login_at),
                     CONSTRAINT superadmin_moderator_log_user_fk FOREIGN KEY (moderator_id) REFERENCES admin_users (id) ON DELETE SET NULL
+                ) ENGINE=InnoDB'
+            );
+            $moderatorActivityColumn = $mysql->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'superadmin_moderator_login_logs' AND COLUMN_NAME = 'last_activity_at'"
+            )->fetchColumn();
+            if ((int)$moderatorActivityColumn === 0) {
+                $mysql->exec('ALTER TABLE superadmin_moderator_login_logs ADD COLUMN last_activity_at DATETIME NULL AFTER login_at');
+            }
+            $mysql->exec(
+                'CREATE TABLE IF NOT EXISTS superadmin_moderation_activity (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    actor_id BIGINT UNSIGNED NOT NULL,
+                    actor_role VARCHAR(20) NOT NULL,
+                    actor_name VARCHAR(120) NOT NULL,
+                    actor_email VARCHAR(254) NOT NULL,
+                    action VARCHAR(80) NOT NULL,
+                    target_type VARCHAR(40) NOT NULL,
+                    target_id BIGINT UNSIGNED NOT NULL,
+                    target_label VARCHAR(254) NULL,
+                    reason VARCHAR(500) NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX moderation_activity_time (created_at, id)
                 ) ENGINE=InnoDB'
             );
             $mysql->exec(
@@ -81,11 +105,33 @@ final class Database
                     name VARCHAR(120) NOT NULL,
                     email VARCHAR(254) NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
+                    temp_password_hash VARCHAR(255) NULL,
+                    temp_password_expires_at DATETIME NULL,
+                    temp_password_sent_at DATETIME NULL,
+                    temp_password_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
                     profile_image VARCHAR(255) NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE KEY superadmin_users_email_unique (email)
                 ) ENGINE=InnoDB'
             );
+            foreach (['admin_users', 'superadmin_users'] as $table) {
+                $columns = $mysql->prepare(
+                    'SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
+                );
+                $columns->execute([$table]);
+                $existingColumns = array_flip($columns->fetchAll(PDO::FETCH_COLUMN));
+                foreach ([
+                    'temp_password_hash' => 'VARCHAR(255) NULL',
+                    'temp_password_expires_at' => 'DATETIME NULL',
+                    'temp_password_sent_at' => 'DATETIME NULL',
+                    'temp_password_attempts' => 'TINYINT UNSIGNED NOT NULL DEFAULT 0',
+                ] as $column => $definition) {
+                    if (!isset($existingColumns[$column])) {
+                        $mysql->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+                    }
+                }
+            }
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS superadmin_app_state (
                     user_id BIGINT UNSIGNED NOT NULL,
@@ -270,7 +316,7 @@ final class Database
                     reporter_user_id INT NOT NULL,
                     reason VARCHAR(255) NULL,
                     additional_comments TEXT NULL,
-                    status VARCHAR(50) NOT NULL DEFAULT "Pending",
+                    status VARCHAR(50) NOT NULL DEFAULT \'Pending\',
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     INDEX mobile_comment_reports_status (status),
                     INDEX mobile_comment_reports_comment (comment_id),
@@ -313,6 +359,16 @@ final class Database
             if ((int)$suspensionTimezoneColumn === 0) {
                 $mysql->exec('ALTER TABLE admin_mobile_user_moderation ADD COLUMN suspension_timezone_offset SMALLINT NULL AFTER suspended_until');
             }
+            $mysql->exec(
+                "CREATE TABLE IF NOT EXISTS mobile_appeals (
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    appeal_message TEXT NOT NULL,
+                    status VARCHAR(50) DEFAULT 'Pending',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX mobile_appeals_user (user_id, id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
             $mysql->exec(
                 'CREATE TABLE IF NOT EXISTS mobile_notifications (
                     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

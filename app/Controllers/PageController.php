@@ -70,7 +70,7 @@ final class PageController
             $this->flash('Your session ended. Please sign in again.', 'error');
         }
 
-        if (in_array($this->page, ['login', 'register'], true)) {
+        if (in_array($this->page, ['login', 'register', 'forgot-password'], true)) {
             if ($this->user !== null) {
                 $this->redirect('home.php');
             }
@@ -83,18 +83,38 @@ final class PageController
             }
         }
 
-        if ($this->page === 'restricted' && ($this->user['role'] ?? '') !== 'admin') {
-            http_response_code(403);
-            exit('Only the admin can manage moderator restrictions.');
-        }
         if (($this->user['role'] ?? '') === 'admin'
-            && !in_array($this->page, ['home', 'logs', 'profile', 'restricted'], true)) {
+            && !in_array($this->page, ['home', 'logs', 'profile', 'moderator-activity', 'reports-overview', 'user-accounts'], true)) {
             http_response_code(403);
             exit('This page is not available in the Admin dashboard.');
+        }
+        if (in_array($this->page, ['moderator-activity', 'reports-overview', 'user-accounts'], true)
+            && ($this->user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            exit('Only the admin can view this page.');
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->handlePost();
+        }
+        if ($this->page === 'home' && ($this->user['role'] ?? '') === 'moderator' && isset($_GET['moderator_heartbeat'])) {
+            header('Cache-Control: no-store');
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => true], JSON_THROW_ON_ERROR);
+            exit;
+        }
+        if ($this->page === 'logs' && ($this->user['role'] ?? '') === 'admin' && isset($_GET['moderator_poll'])) {
+            $sessions = (new ModeratorAccountModel($this->db))->recentSessions();
+            header('Cache-Control: no-store');
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['sessions' => array_map(
+                static fn(array $session): array => [
+                    'id' => (int)$session['id'],
+                    'state' => $session['state'],
+                ],
+                $sessions
+            )], JSON_THROW_ON_ERROR);
+            exit;
         }
         if ($this->page === 'home' && ($this->user['role'] ?? '') === 'admin' && isset($_GET['moderator_poll'])) {
             $moderators = (new ModeratorAccountModel($this->db))->list();
@@ -111,10 +131,15 @@ final class PageController
         }
         if ($this->page === 'logs' && ($this->user['role'] ?? '') !== 'admin' && isset($_GET['poll'])) {
             // Send refreshed counts and session rows to the Logs page.
+            $requestedPage = filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT);
+            $sessionPage = $this->mobileLoginLogs()->sessionPage($requestedPage === false ? 1 : $requestedPage);
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
                 'active_users' => $this->mobileLoginLogs()->activeUserCount(),
-                'sessions' => $this->mobileLoginLogs()->recentSessions(),
+                'sessions' => $sessionPage['sessions'],
+                'current_page' => $sessionPage['current_page'],
+                'total_pages' => $sessionPage['total_pages'],
             ], JSON_THROW_ON_ERROR);
             exit;
         }
@@ -190,6 +215,34 @@ final class PageController
         return $this->mobileLoginLogs;
     }
 
+    private function loggedAction(string $action, string $targetType, int $targetId, callable $operation, string $reason = ''): bool
+    {
+        $this->db->beginTransaction();
+        try {
+            $targetLabel = null;
+            if ($targetType === 'moderator') {
+                $target = $this->db->prepare("SELECT email FROM admin_users WHERE id = ? AND role = 'moderator' FOR UPDATE");
+                $target->execute([$targetId]);
+                $targetLabel = $target->fetchColumn() ?: null;
+            } elseif ($targetType === 'mobile user' && $action === 'delete-mobile-account') {
+                $target = $this->db->prepare('SELECT institutional_email FROM mobile_users WHERE id = ? FOR UPDATE');
+                $target->execute([$targetId]);
+                $targetLabel = $target->fetchColumn() ?: null;
+            }
+            $changed = $operation();
+            if (!$changed) {
+                $this->db->rollBack();
+                return false;
+            }
+            (new ModerationActivityModel($this->db))->record($this->user, $action, $targetType, $targetId, $reason, $targetLabel);
+            $this->db->commit();
+            return $changed;
+        } catch (Throwable $exception) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $exception;
+        }
+    }
+
     /** Adds notifications for newly AI-flagged mobile posts and comments. */
     private function syncAiFlaggedPostNotifications(): void
     {
@@ -262,7 +315,23 @@ final class PageController
             if ($moderatorSessionId !== null) {
                 $_SESSION['moderator_session_id'] = $moderatorSessionId;
             }
+            if (!empty($user['temporary_password_login'])) {
+                $this->flash('You signed in with a temporary password. Change it in Profile before it expires.', 'success');
+                $this->redirect('profile.php');
+            }
             $this->redirect('home.php');
+        }
+        if ($this->page === 'forgot-password' && $action === 'request-temporary-password') {
+            $email = trim((string)($_POST['email'] ?? ''));
+            $role = (string)($_POST['role'] ?? '');
+            if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                $this->flash('Enter a valid email address.', 'error');
+            } elseif (!in_array($role, ['moderator', 'admin'], true)) {
+                $this->flash('Select the account role you use to sign in.', 'error');
+            } else {
+                $this->users->sendTemporaryPassword($email, $role);
+            }
+            $this->redirect('forgot-password.php');
         }
         if ($this->page === 'register' && $action === 'register') {
             $result = $this->users->register($_POST);
@@ -292,17 +361,41 @@ final class PageController
             $this->redirect('login.php');
         }
 
+        if ($this->user['role'] === 'admin' && $this->page === 'user-accounts') {
+            if ($action !== 'delete-mobile-account') {
+                http_response_code(400);
+                exit('Unsupported form action.');
+            }
+            $id = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+            if ($id === false || $id === null || $id <= 0) {
+                $this->flash('Select a valid mobile account.', 'error');
+                $this->redirect('user-accounts.php');
+            }
+            $deleted = $this->loggedAction($action, 'mobile user', $id, fn(): bool => $this->mobile->deleteUserAccount($id));
+            $this->flash($deleted ? 'Mobile account deleted.' : 'Mobile account was not found.', $deleted ? 'success' : 'error');
+            $this->redirect('user-accounts.php');
+        }
+
         if ($this->user['role'] === 'admin' && $this->page === 'home') {
             $moderators = new ModeratorAccountModel($this->db);
             $moderatorId = (int)($_POST['moderator_id'] ?? 0);
+            $reason = trim((string)($_POST['reason'] ?? ''));
+            if (in_array($action, ['suspend-moderator', 'remove-moderator'], true)
+                && ($reason === '' || mb_strlen($reason) > 500)) {
+                $this->flash('Enter a reason of up to 500 characters.', 'error');
+                $this->redirect('home.php');
+            }
             if ($action === 'suspend-moderator' || $action === 'restore-moderator') {
                 $suspended = $action === 'suspend-moderator';
-                $changed = $moderators->setSuspended($moderatorId, $suspended, $suspended ? $this->suspensionDeadline() : null);
+                $deadline = $suspended ? $this->suspensionDeadline() : null;
+                $changed = $this->loggedAction($action, 'moderator', $moderatorId,
+                    fn(): bool => $moderators->setSuspended($moderatorId, $suspended, $deadline), $reason);
                 $message = $changed
                     ? ($action === 'suspend-moderator' ? 'Moderator suspended.' : 'Moderator restored.')
                     : 'Moderator was not found or already has that status.';
             } elseif ($action === 'remove-moderator') {
-                $changed = $moderators->remove($moderatorId);
+                $changed = $this->loggedAction($action, 'moderator', $moderatorId,
+                    fn(): bool => $moderators->remove($moderatorId), $reason);
                 $message = $changed ? 'Moderator account removed.' : 'Moderator account was not found.';
             } else {
                 http_response_code(400);
@@ -329,7 +422,6 @@ final class PageController
             ],
             $this->page === 'notifications' => ['read-all'],
             $this->page === 'profile' => ['update-name', 'update-profile-picture', 'change-password'],
-            $this->page === 'restricted' => ['restrict', 'unrestrict'],
             default => [],
         };
         if (!in_array($action, $allowedActions, true)) {
@@ -341,29 +433,37 @@ final class PageController
                 $this->aiModeration->setEnabled((string)($_POST['enabled'] ?? '0') === '1');
                 $this->flash('AI Moderation setting updated.');
             } elseif ($action === 'mobile-remove') {
-                $removed = $this->mobile->removePost((int)($_POST['post_id'] ?? 0));
+                $id = (int)($_POST['post_id'] ?? 0);
+                $removed = $this->loggedAction($action, 'post', $id, fn(): bool => $this->mobile->removePost($id));
                 $this->flash($removed ? 'Mobile post removed and the user was notified.' : 'Mobile post was not found.', $removed ? 'success' : 'error');
             } elseif ($action === 'mobile-restore-comment-archive') {
-                $restored = $this->mobile->restoreComment((int)($_POST['archive_id'] ?? 0));
+                $id = (int)($_POST['archive_id'] ?? 0);
+                $restored = $this->loggedAction($action, 'comment archive', $id, fn(): bool => $this->mobile->restoreComment($id));
                 $this->flash($restored ? 'Comment restored to the mobile app.' : 'This comment could not be restored (its post may no longer exist).', $restored ? 'success' : 'error');
             } elseif ($action === 'mobile-restore-post') {
-                $restored = $this->mobile->restorePost((int)($_POST['archive_id'] ?? 0));
+                $id = (int)($_POST['archive_id'] ?? 0);
+                $restored = $this->loggedAction($action, 'post archive', $id, fn(): bool => $this->mobile->restorePost($id));
                 $this->flash($restored ? 'Post restored to the mobile app.' : 'This post could not be restored.', $restored ? 'success' : 'error');
             } elseif ($action === 'mobile-approve') {
-                $this->mobile->setPostStatus((int)($_POST['post_id'] ?? 0), 'approved', (string)($_POST['reason'] ?? ''));
-                $this->flash('Mobile post status updated.');
+                $id = (int)($_POST['post_id'] ?? 0);
+                $reason = trim((string)($_POST['reason'] ?? ''));
+                $updated = $this->loggedAction($action, 'post', $id, fn(): bool => $this->mobile->setPostStatus($id, 'approved', $reason), $reason);
+                $this->flash($updated ? 'Mobile post status updated.' : 'Mobile post status could not be updated.', $updated ? 'success' : 'error');
             } elseif ($action === 'mobile-delete-comment') {
-                $deleted = $this->mobile->removeComment((int)($_POST['comment_id'] ?? 0));
+                $id = (int)($_POST['comment_id'] ?? 0);
+                $deleted = $this->loggedAction($action, 'comment', $id, fn(): bool => $this->mobile->removeComment($id));
                 $this->flash($deleted ? 'Mobile comment deleted and the user was notified.' : 'Mobile comment was not found.', $deleted ? 'success' : 'error');
                 if ($deleted && isset($_POST['report_id'])) {
                     $this->redirect('removed.php?type=comments');
                 }
             } elseif ($action === 'mobile-hide-comment' || $action === 'mobile-restore-comment') {
                 $status = $action === 'mobile-hide-comment' ? 'hidden' : 'approved';
-                $this->mobile->setCommentStatus((int)($_POST['comment_id'] ?? 0), $status);
-                $this->flash('Mobile comment status updated.');
+                $id = (int)($_POST['comment_id'] ?? 0);
+                $updated = $this->loggedAction($action, 'comment', $id, fn(): bool => $this->mobile->setCommentStatus($id, $status));
+                $this->flash($updated ? 'Mobile comment status updated.' : 'Mobile comment status could not be updated.', $updated ? 'success' : 'error');
             } elseif ($action === 'mobile-dismiss-comment-report') {
-                $dismissed = $this->mobile->dismissCommentReport((int)($_POST['report_id'] ?? 0));
+                $id = (int)($_POST['report_id'] ?? 0);
+                $dismissed = $this->loggedAction($action, 'comment report', $id, fn(): bool => $this->mobile->dismissCommentReport($id));
                 $this->flash(
                     $dismissed ? 'Comment report dismissed.' : 'Comment report was already updated.',
                     $dismissed ? 'success' : 'error'
@@ -372,7 +472,8 @@ final class PageController
                     $this->redirect('dismissed.php');
                 }
             } elseif ($action === 'mobile-restore-comment-report') {
-                $restored = $this->mobile->restoreCommentReport((int)($_POST['report_id'] ?? 0));
+                $id = (int)($_POST['report_id'] ?? 0);
+                $restored = $this->loggedAction($action, 'comment report', $id, fn(): bool => $this->mobile->restoreCommentReport($id));
                 $this->flash(
                     $restored ? 'Comment report restored to current reports.' : 'Comment report was already updated.',
                     $restored ? 'success' : 'error'
@@ -388,32 +489,37 @@ final class PageController
                     $suspendedUntil = $this->suspensionDeadline();
                     $suspensionTimezoneOffset = (int)$_POST['suspension_timezone_offset'];
                 }
-                $updated = $this->mobile->setUserStatus(
-                    (int)($_POST['user_id'] ?? 0),
+                $id = (int)($_POST['user_id'] ?? 0);
+                $reason = trim((string)($_POST['reason'] ?? ''));
+                $updated = $this->loggedAction($action, 'mobile user', $id, fn(): bool => $this->mobile->setUserStatus(
+                    $id,
                     $status,
-                    (string)($_POST['reason'] ?? ''),
+                    $reason,
                     $suspendedUntil,
                     $suspensionTimezoneOffset
-                );
+                ), $reason);
                 $this->flash(
                     $updated ? ($status === 'suspended' ? 'User suspension lift time was saved.' : 'Mobile user status updated.') : 'Mobile user status could not be updated.',
                     $updated ? 'success' : 'error'
                 );
             } elseif ($action === 'mobile-dismiss-report') {
-                $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
+                $id = (int)($_POST['report_id'] ?? 0);
+                $updated = $this->loggedAction($action, 'post report', $id, fn(): bool => $this->mobile->setReportStatus($id, 'Dismissed'));
                 $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
                 if ($updated) {
                     $this->redirect('dismissed.php');
                 }
             } elseif ($action === 'mobile-restore-report') {
-                $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Pending');
+                $id = (int)($_POST['report_id'] ?? 0);
+                $updated = $this->loggedAction($action, 'post report', $id, fn(): bool => $this->mobile->setReportStatus($id, 'Pending'));
                 $this->flash($updated ? 'Report restored to current reports.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
                 $this->redirect($updated ? 'reported.php' : $this->returnUrl());
             }
             $this->redirect($this->returnUrl());
         }
         if ($action === 'mobile-dismiss-report') {
-            $updated = $this->mobile->setReportStatus((int)($_POST['report_id'] ?? 0), 'Dismissed');
+            $id = (int)($_POST['report_id'] ?? 0);
+            $updated = $this->loggedAction($action, 'post report', $id, fn(): bool => $this->mobile->setReportStatus($id, 'Dismissed'));
             $this->flash($updated ? 'Mobile report dismissed.' : 'Mobile report was already updated.', $updated ? 'success' : 'error');
             $this->redirect($this->returnUrl());
         }
@@ -443,9 +549,6 @@ final class PageController
                 break;
             case 'profile':
                 $this->handleProfileAction($action);
-                break;
-            case 'restricted':
-                $this->handleRestrictedAction($action);
                 break;
         }
         $this->redirect($this->returnUrl());
@@ -655,22 +758,6 @@ final class PageController
         $this->flash('Profile picture updated.');
     }
 
-    /** Adds or removes a moderator restriction submitted by an admin. */
-    private function handleRestrictedAction(string $action): void
-    {
-        if ($action === 'restrict') {
-            $error = $this->restricted->add(
-                (string)($_POST['email'] ?? ''),
-                (string)($_POST['reason'] ?? ''),
-                (int)$this->user['id']
-            );
-            $this->flash($error ?? 'Moderator restricted.', $error === null ? 'success' : 'error');
-        } elseif ($action === 'unrestrict') {
-            $this->restricted->remove((int)($_POST['user_id'] ?? 0));
-            $this->flash('Moderator can post and comment again.');
-        }
-    }
-
     private function suspensionDeadline(): string
     {
         $submittedDateTime = (string)($_POST['suspended_until'] ?? '');
@@ -699,7 +786,7 @@ final class PageController
     /** Builds view data with the page-specific data builder. */
     private function pageData(): array
     {
-        if (in_array($this->page, ['login', 'register'], true)) {
+        if (in_array($this->page, ['login', 'register', 'forgot-password'], true)) {
             return [];
         }
         if ($this->mobile === null) {
@@ -710,7 +797,6 @@ final class PageController
             $this->page,
             $this->posts,
             $this->notifications,
-            $this->restricted,
             $this->aiModeration,
             $this->mobile,
             $this->db

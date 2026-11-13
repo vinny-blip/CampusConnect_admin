@@ -324,7 +324,28 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
           </div>
         </dl>
         </a>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>"><?php if ($item['moderation_status'] === 'active'): ?><button class="btn-action remove" type="button" data-open-suspension data-user-id="<?= (int)$item['id'] ?>">Suspend</button><button class="btn-action ban" name="action" value="mobile-ban-user" onclick="return confirm('Ban this user?')">Ban</button><?php else: ?><button class="btn-action approve" name="action" value="mobile-restore-user"><?= $item['moderation_status'] === 'banned' ? 'Unban' : 'Restore' ?></button><?php endif; ?></form>
+        <form class="row-actions" method="post">
+          <?= $csrf ?>
+          <input type="hidden" name="user_id" value="<?= (int)$item['id'] ?>">
+          <?php if ($item['moderation_status'] === 'active'): ?>
+            <button class="btn-action remove" type="button" data-open-suspension data-user-id="<?= (int)$item['id'] ?>">Suspend</button>
+            <button class="btn-action ban" name="action" value="mobile-ban-user" onclick="return confirm('Ban this user?')">Ban</button>
+          <?php else: ?>
+            <?php if ($item['moderation_status'] === 'banned' && !empty($item['appeal_message'])): ?>
+              <button
+                class="btn-action view-appeal"
+                type="button"
+                data-open-appeal
+                data-appeal-user="<?= h($item['full_name']) ?>"
+                data-appeal-email="<?= h($item['institutional_email']) ?>"
+                data-appeal-message="<?= h($item['appeal_message'] ?? '') ?>"
+                data-appeal-status="<?= h($item['appeal_status'] ?? '') ?>"
+                data-appeal-created-at="<?= h($item['appeal_created_at'] ?? '') ?>"
+              >View appeal</button>
+            <?php endif; ?>
+            <button class="btn-action approve" name="action" value="mobile-restore-user"><?= $item['moderation_status'] === 'banned' ? 'Unban' : 'Restore' ?></button>
+          <?php endif; ?>
+        </form>
       </div>
     <?php endforeach; ?>
     <?php if (!$mobileUsers): ?><p class="empty">No users match this filter.</p><?php endif; ?>
@@ -376,7 +397,7 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
             <dd><?= h($item['moderation_status']) ?><?= (int)$item['report_count'] ? ' · <span class="flag">reported</span>' : '' ?></dd>
           </div>
         </dl>
-        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$item['id'] ?>"><button class="btn-action approve" name="action" value="mobile-approve">Approve</button> <button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove</button></form>
+        <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$item['id'] ?>"><?php if ($item['moderation_status'] !== 'approved'): ?><button class="btn-action approve" name="action" value="mobile-approve">Approve</button> <?php endif; ?><button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove</button></form>
       </div>
     <?php endforeach; ?>
   <?php endif; ?>
@@ -411,6 +432,25 @@ $heading = $isUsers ? 'Users' : ($isReportArchiveView ? 'Report & Removal Histor
     </div>
   <?php endif; ?>
   <?php if ($isUsers): ?>
+    <dialog class="appeal-dialog" data-appeal-dialog aria-labelledby="appeal-dialog-title">
+      <div class="appeal-dialog-content">
+        <header class="appeal-dialog-heading">
+          <div>
+            <h3 id="appeal-dialog-title">Account appeal</h3>
+            <p data-appeal-user-details></p>
+          </div>
+          <button class="appeal-dialog-close" type="button" aria-label="Close appeal" data-close-appeal>&times;</button>
+        </header>
+        <dl class="appeal-dialog-meta" data-appeal-meta hidden>
+          <div><dt>Status</dt><dd data-appeal-status></dd></div>
+          <div><dt>Submitted</dt><dd data-appeal-created-at></dd></div>
+        </dl>
+        <p class="appeal-dialog-message" data-appeal-message></p>
+        <div class="suspension-dialog-actions">
+          <button class="btn-action secondary" type="button" data-close-appeal>Close</button>
+        </div>
+      </div>
+    </dialog>
     <?php
       $suspensionAction = 'mobile-suspend-user';
       $suspensionIdName = 'user_id';

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 final class MobileLoginLogModel
 {
+    private const PAGE_SIZE = 25;
+
     /** Shares the database connection used for mobile session records. */
     public function __construct(private PDO $db)
     {
@@ -19,10 +21,14 @@ final class MobileLoginLogModel
         )->fetchColumn();
     }
 
-    /** Returns recent sessions with explicit or estimated logout status. */
-    public function recentSessions(): array
+    /** Returns one page of recent sessions with explicit or estimated logout status. */
+    public function sessionPage(int $requestedPage): array
     {
-        return $this->db->query(
+        $totalSessions = (int)$this->db->query('SELECT COUNT(*) FROM admin_mobile_login_logs')->fetchColumn();
+        $totalPages = max(1, (int)ceil($totalSessions / self::PAGE_SIZE));
+        $currentPage = min(max(1, $requestedPage), $totalPages);
+        $offset = ($currentPage - 1) * self::PAGE_SIZE;
+        $sessions = $this->db->query(
             "SELECT full_name, username, institutional_email, login_at, last_activity_at, logout_at,
                     CASE
                         WHEN logout_at IS NOT NULL THEN 'Logged out'
@@ -41,8 +47,14 @@ final class MobileLoginLogModel
                         ELSE NULL
                     END AS estimated_logout_at
              FROM admin_mobile_login_logs
-             ORDER BY login_at DESC
-             LIMIT 500"
+             ORDER BY login_at DESC, id DESC
+             LIMIT " . self::PAGE_SIZE . " OFFSET {$offset}"
         )->fetchAll();
+
+        return [
+            'sessions' => $sessions,
+            'current_page' => $currentPage,
+            'total_pages' => $totalPages,
+        ];
     }
 }

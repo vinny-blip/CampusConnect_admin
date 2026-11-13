@@ -13,8 +13,13 @@
     <strong><?= count(array_filter($moderators, static fn(array $moderator): bool => (bool)$moderator['suspended'])) ?></strong>
   </article>
 </section>
+<div class="moderator-search">
+  <label for="moderator-search">Search moderators</label>
+  <input id="moderator-search" type="search" placeholder="Search by name or email" data-moderator-search>
+</div>
+<p class="empty" data-moderator-no-results hidden>No matching moderators found.</p>
 <?php foreach ($moderators as $moderator): ?>
-  <div class="row-item user-list-row moderator-account-row" data-moderator-row="<?= (int)$moderator['id'] ?>" data-suspended="<?= $moderator['suspended'] ? '1' : '0' ?>">
+  <div class="row-item user-list-row moderator-account-row" data-moderator-row="<?= (int)$moderator['id'] ?>" data-search="<?= h($moderator['name'] . ' ' . $moderator['email']) ?>" data-suspended="<?= $moderator['suspended'] ? '1' : '0' ?>">
     <div class="user-item-info">
       <?php if (!empty($moderator['profile_image'])): ?>
         <img class="registered-user-avatar" src="<?= h($moderator['profile_image']) ?>" alt="">
@@ -28,6 +33,7 @@
           <small>Lifts <time data-suspension-lift data-utc="<?= h((new DateTimeImmutable((string)$moderator['suspended_until'], new DateTimeZone('UTC')))->format(DATE_ATOM)) ?>"><?= h($moderator['suspended_until']) ?> UTC</time></small>
         <?php endif; ?>
         <small>Registered <?= h($moderator['created_at']) ?></small>
+        <small>Last activity: <?= h($moderator['last_activity_at'] ?: 'Not recorded') ?></small>
       </span>
     </div>
     <div class="moderator-actions">
@@ -48,6 +54,7 @@
           <?= $csrf ?>
           <input type="hidden" name="moderator_id" value="<?= (int)$moderator['id'] ?>">
           <input type="hidden" name="action" value="remove-moderator">
+          <label>Reason <input name="reason" type="text" maxlength="500" required></label>
           <button class="btn-action ban" type="submit">Confirm removal</button>
         </form>
       </details>
@@ -59,5 +66,6 @@
   $suspensionAction = 'suspend-moderator';
   $suspensionIdName = 'moderator_id';
   $suspensionTitle = 'Suspend moderator';
+  $suspensionReasonRequired = true;
   require dirname(__DIR__) . '/partials/suspension-dialog.php';
 ?>

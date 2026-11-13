@@ -4,9 +4,9 @@ declare(strict_types=1);
 final class Router
 {
     private const ROUTES = [
-        'index', 'login', 'register', 'home', 'control', 'queues',
+        'index', 'login', 'register', 'forgot-password', 'home', 'control', 'queues',
         'about', 'faqs', 'post', 'overview', 'posts',
-        'comments', 'restricted', 'reported', 'removed', 'dismissed', 'users', 'user', 'logs',
+        'comments', 'reported', 'removed', 'dismissed', 'users', 'user', 'logs', 'moderator-activity', 'reports-overview', 'user-accounts',
         'notifications', 'profile', 'search',
         'mobile-feed', 'mobile-queues', 'mobile-reports', 'mobile-post', 'mobile-comments',
     ];

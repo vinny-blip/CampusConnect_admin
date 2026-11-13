@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title><?= $page === 'login' ? 'Login' : 'Register' ?> · CampusConnect</title>
+  <title><?= $page === 'login' ? 'Login' : ($page === 'register' ? 'Register' : 'Forgot password') ?> · CampusConnect</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/base.css?v=<?= (int)filemtime(dirname(__DIR__, 2) . '/public/assets/css/base.css') ?>">
@@ -41,7 +41,8 @@
       <button class="btn" type="submit">Login</button>
     </form>
     <p class="alt">New moderator? <a href="register.php">Create an account</a></p>
-  <?php else: ?>
+    <p class="alt"><a href="forgot-password.php">Forgot password?</a></p>
+  <?php elseif ($page === 'register'): ?>
     <h1>CampusConnect</h1>
     <p class="tagline">Create your student moderator account</p>
     <form method="post" action="register.php">
@@ -56,6 +57,25 @@
       <button class="btn" type="submit">Register</button>
     </form>
     <p class="alt">Already registered? <a href="login.php">Log in</a></p>
+  <?php else: ?>
+    <h1>Forgot password?</h1>
+    <p class="tagline">Get a temporary password by email</p>
+    <p class="auth-recovery-note">Enter the email and role for your account. If it matches, we'll email a temporary password that expires in 30 minutes. Use it to log in, then change your password in Profile. If no email arrives, check spam or contact an administrator.</p>
+    <form method="post" action="forgot-password.php">
+      <?= $csrf ?>
+      <input type="hidden" name="action" value="request-temporary-password">
+      <label for="recovery-email">Institutional Email</label>
+      <input id="recovery-email" name="email" type="email" required autocomplete="email">
+      <label for="recovery-role">Role</label>
+      <select id="recovery-role" name="role" required>
+        <option value="" selected disabled>Select your role</option>
+        <option value="moderator">Student Moderator</option>
+        <option value="admin">Admin</option>
+      </select>
+      <?php flash_message($flash); ?>
+      <button class="btn" type="submit">Send temporary password</button>
+    </form>
+    <p class="alt">Remembered it? <a href="login.php">Back to login</a></p>
   <?php endif; ?>
 </main>
 <script>

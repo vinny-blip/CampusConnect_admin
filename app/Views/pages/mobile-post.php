@@ -15,15 +15,30 @@
     <p class="sub"><?= h($mobilePost['category']) ?> · <?= h($mobilePost['username']) ?> · <?= h($mobilePost['moderation_status']) ?><?= !empty($mobilePost['is_archived']) ? ' archive' : '' ?></p>
     <h3>Title: <?= h($mobilePost['title']) ?></h3>
     <p><?= nl2br(h($mobilePost['content'])) ?></p>
+    <?php
+      $attachmentValue = (string)($mobilePost['file_url'] ?? '');
+      require dirname(__DIR__) . '/partials/mobile-attachments.php';
+    ?>
     <?php if ((int)$mobilePost['report_count']): ?><p class="sub">Reports: <?= (int)$mobilePost['report_count'] ?><?= $mobilePost['report_reason'] ? ' · ' . h($mobilePost['report_reason']) : '' ?></p><?php endif; ?>
     <?php if (!empty($mobilePost['is_archived'])): ?>
       <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="archive_id" value="<?= (int)$mobilePost['archive_id'] ?>"><button class="btn-action approve" name="action" value="mobile-restore-post" onclick="return confirm('Restore this post to the mobile app?')">Restore post</button></form>
     <?php else: ?>
-      <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$mobilePost['id'] ?>"><button class="btn-action approve" name="action" value="mobile-approve">Approve</button> <button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove</button></form>
+      <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="post_id" value="<?= (int)$mobilePost['id'] ?>"><?php if ($mobilePost['moderation_status'] !== 'approved'): ?><button class="btn-action approve" name="action" value="mobile-approve">Approve</button> <?php endif; ?><button class="btn-action remove" name="action" value="mobile-remove" onclick="return confirm('Remove this post from the mobile app?')">Remove</button></form>
     <?php endif; ?>
   </article>
   <h3>Comments (<?= count($mobilePost['comments']) ?>)</h3>
   <?php foreach ($mobilePost['comments'] as $comment): ?>
-    <div class="row-item"><span><b><?= h($comment['username']) ?></b><?php if (!empty($comment['ai_flagged'])): ?> <span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php endif; ?><br><?= nl2br(h($comment['content'])) ?><?php if ((int)$comment['report_count'] > 0): ?><br><span class="flag"><?= (int)$comment['report_count'] ?> report<?= (int)$comment['report_count'] === 1 ? '' : 's' ?><?= !empty($comment['report_reasons']) ? ': ' . h($comment['report_reasons']) : '' ?></span><?php endif; ?></span><form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Remove this comment from the mobile app?')">Remove</button></form></div>
+    <div class="row-item">
+      <div class="mobile-comment-content">
+        <b><?= h($comment['username']) ?></b><?php if (!empty($comment['ai_flagged'])): ?> <span class="ai-flag-badge" title="This comment was flagged by AI moderation">AI FLAGGED</span><?php endif; ?>
+        <?php if (trim((string)$comment['content']) !== ''): ?><p class="mobile-comment-text"><?= nl2br(h($comment['content'])) ?></p><?php endif; ?>
+        <?php if ((int)$comment['report_count'] > 0): ?><p class="flag"><?= (int)$comment['report_count'] ?> report<?= (int)$comment['report_count'] === 1 ? '' : 's' ?><?= !empty($comment['report_reasons']) ? ': ' . h($comment['report_reasons']) : '' ?></p><?php endif; ?>
+        <?php
+          $attachmentValue = (string)($comment['file_url'] ?? '');
+          require dirname(__DIR__) . '/partials/mobile-attachments.php';
+        ?>
+      </div>
+      <form class="row-actions" method="post"><?= $csrf ?><input type="hidden" name="comment_id" value="<?= (int)$comment['id'] ?>"><button class="btn-action remove" name="action" value="mobile-delete-comment" onclick="return confirm('Remove this comment from the mobile app?')">Remove</button></form>
+    </div>
   <?php endforeach; ?>
 <?php endif; ?>

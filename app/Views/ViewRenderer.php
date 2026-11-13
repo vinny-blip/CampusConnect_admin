@@ -9,7 +9,7 @@ final class ViewRenderer
         extract($data, EXTR_SKIP);
         $page = $page;
 
-        if (in_array($page, ['login', 'register'], true)) {
+        if (in_array($page, ['login', 'register', 'forgot-password'], true)) {
             require __DIR__ . '/auth.php';
             return;
         }

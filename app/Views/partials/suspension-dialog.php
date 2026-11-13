@@ -12,6 +12,11 @@
         <p>Choose when this account can return.</p>
       </div>
     </header>
+    <?php if (!empty($suspensionReasonRequired)): ?>
+      <label class="suspension-reason">Reason for suspension
+        <input type="text" name="reason" maxlength="500" required>
+      </label>
+    <?php endif; ?>
     <section class="suspension-calendar" aria-label="Choose suspension end date">
       <div class="suspension-calendar-heading">
         <button class="calendar-nav" type="button" aria-label="Previous month" data-calendar-previous>&lsaquo;</button>

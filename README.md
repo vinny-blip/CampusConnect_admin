@@ -31,6 +31,10 @@ configuration files.
 4. Set the domain's PHP version to a supported PHP 8.x release and ensure PDO
    MySQL, fileinfo, and GD/image support are enabled. PDO SQLite is not used
    by this application.
+   Password recovery sends a 6-digit temporary password using PHP `mail()`;
+   configure Hostinger mail delivery for `noreply@campusconnect.uslsbsit.com`.
+   Temporary passwords expire in 30 minutes. Mail failures are logged with
+   `[CampusConnect password recovery]`.
 5. If AI moderation is used, configure `OPENAI_API_KEY` through Hostinger's
    server environment mechanism. If PHP does not receive Hostinger environment
    variables, create `config/openai.local.php` on the server with only this
@@ -123,7 +127,7 @@ the mobile moderation dashboard. They can suspend or restore a moderator, or
 permanently remove an account after confirmation. Suspension blocks new
 sign-ins and ends existing dashboard sessions. An Admin chooses a lift date
 and time in their local time zone or can restore the account early. Timed
-suspensions expire when the Admin overview is checked or the moderator next
+suspensions expire when Moderator Accounts is checked or the moderator next
 signs in; previously indefinite suspensions still require manual restoration.
 Removal also deletes that account's dashboard
 state, but keeps its login history. Student Moderator registrations are not
@@ -131,12 +135,31 @@ email-verified, so removal is not a permanent ban on re-registration.
 
 Admins can view Student Moderator sign-in and sign-out history under Moderator
 Logs. History starts after this feature is deployed; previous sign-ins cannot
-be reconstructed. Closing a browser without signing out may leave the sign-out
-time unrecorded. Existing Student Moderator sessions must sign in again after
-the upgrade so future sessions can be tracked.
+be reconstructed. A session is shown as signed in when the moderator dashboard
+has recorded activity in the last five minutes. If no sign-out is recorded and
+activity stops, the session is shown as timed out after five minutes, with an
+estimated end time based on its last activity. Existing Student Moderator
+sessions must sign in again after the upgrade so future sessions can be tracked.
 Moderators receive an in-app notification for each AI-flagged mobile post
 recorded in the last 30 days. The header bell displays the unread count and
 checks for new notifications every 30 seconds while the dashboard is open.
+
+Admins can search moderator accounts and see their last recorded dashboard
+activity. Suspending or removing an account requires a reason. Moderator
+Activity records successful mobile moderation actions and administrator account
+decisions, including the actor and target; it starts recording after deployment
+and displays the most recent 200 entries. Reports Overview shows pending post
+reports, comment reports, appeals, and posts awaiting review. Appeals are
+counted by their stored status; restoring a user does not update that status.
+Existing moderator restrictions remain enforced; the restrictions management
+page has been removed.
+
+Admins can search and delete mobile accounts under User Accounts. Deletion is
+permanent and removes the account's posts and comments, including other users'
+comments on those posts, as well as related reports and moderation records.
+Uploaded files and login history are retained. Updated mobile clients are signed
+out on the next foreground heartbeat after the account is deleted; deploy
+`mobile_session_heartbeat.php` and the updated Android app for this behavior.
 
 The Mobile data pages read the shared `mobile_users`, `mobile_posts`, and
 `mobile_comments` tables directly. Admin-owned moderation state is stored in
@@ -146,6 +169,10 @@ not copy mobile content into `admin_app_state`. Mobile comment reports are
 stored in `mobile_comment_reports` and appear in the web Reported page. The
 mobile schema must exist in the same Hostinger database for those pages to
 display data.
+On the Users page, a banned account's **View appeal** button shows the latest
+appeal submitted for that user from the mobile app.
+The Mobile post detail page displays image previews and open/download links for
+post and comment attachments saved in each record's `file_url`.
 
 ## Pages
 
@@ -158,7 +185,7 @@ display data.
 | About Us | `about.php` |
 | FAQs | `faqs.php` |
 | Post detail + comments | `post.php?id=1` |
-| Overview, Posts, Comments, Restricted, Reported, Removed, Dismissed | `overview.php`, `posts.php`, `comments.php`, `restricted.php`, `reported.php`, `removed.php`, `dismissed.php` |
+| Overview, Posts, Comments, Reported, Removed, Dismissed | `overview.php`, `posts.php`, `comments.php`, `reported.php`, `removed.php`, `dismissed.php` |
 | Notifications, Profile, Search | `notifications.php`, `profile.php`, `search.php` |
 | Home, Posts, Reported, Comments | `home.php`, `posts.php`, `reported.php`, `comments.php` |
 | Mobile app login session history | `logs.php` |
@@ -167,8 +194,9 @@ Mobile app login logs record successful mobile-app sign-ins and explicit
 sign-outs. The active-user count uses a five-minute activity window refreshed
 by a heartbeat while the mobile app is in the foreground. App closures and
 connection losses cannot send a reliable logout event, so those logout times
-are marked Timed Out. Suspended or banned users are signed out on the next
-foreground heartbeat (within about 15 seconds) and shown a restriction message.
+are marked Timed Out. The Logs page displays 25 sessions per page. Suspended or
+banned users are signed out on the next foreground heartbeat (within about 15
+seconds) and shown a restriction message.
 The heartbeat checks both new token-based sessions and existing app sessions
 that only have a saved user ID. Deploy the updated mobile
 `mobile_session_heartbeat.php` backend file, then build and distribute the

@@ -17,7 +17,6 @@ final class PageDataBuilder
         private string $page,
         private PostModel $posts,
         private NotificationModel $notifications,
-        private RestrictedModel $restricted,
         private AiModerationModel $aiModeration,
         private MobileModerationModel $mobile,
         private PDO $db
@@ -27,7 +26,7 @@ final class PageDataBuilder
     /** Builds view data from the authenticated user's models and request query. */
     public function build(?array $user, array $query, string $httpHost, string $httpReferer): array
     {
-        if (in_array($this->page, ['login', 'register'], true)) {
+        if (in_array($this->page, ['login', 'register', 'forgot-password'], true)) {
             return [];
         }
 
@@ -38,8 +37,15 @@ final class PageDataBuilder
                 $data['moderators'] = $moderators->list();
             } elseif ($this->page === 'logs') {
                 $data['moderatorSessions'] = $moderators->recentSessions();
-            } elseif ($this->page === 'restricted') {
-                $data['restrictedUsers'] = $this->restricted->list();
+            } elseif ($this->page === 'moderator-activity') {
+                $data['moderationActivity'] = (new ModerationActivityModel($this->db))->recent();
+            } elseif ($this->page === 'reports-overview') {
+                $data['reportOverview'] = $this->mobile->adminReportOverview();
+            } elseif ($this->page === 'user-accounts') {
+                $search = trim((string)($query['q'] ?? ''));
+                $requestedPage = filter_var($query['page'] ?? 1, FILTER_VALIDATE_INT);
+                $data['accountSearch'] = $search;
+                $data['mobileAccounts'] = $this->mobile->accountPage($search, $requestedPage === false ? 1 : $requestedPage);
             }
             return $data;
         }
@@ -70,9 +76,11 @@ final class PageDataBuilder
         } elseif ($this->page === 'logs') {
             $logs = $this->mobileLoginLogs();
             $data['activeUserCount'] = $logs->activeUserCount();
-            $data['loginSessions'] = $logs->recentSessions();
-        } elseif ($this->page === 'restricted') {
-            $data['restrictedUsers'] = $this->restricted->list();
+            $requestedPage = filter_var($query['page'] ?? 1, FILTER_VALIDATE_INT);
+            $sessionPage = $logs->sessionPage($requestedPage === false ? 1 : $requestedPage);
+            $data['loginSessions'] = $sessionPage['sessions'];
+            $data['sessionPage'] = $sessionPage['current_page'];
+            $data['sessionPageCount'] = $sessionPage['total_pages'];
         } elseif (in_array($this->page, ['mobile-feed', 'mobile-queues', 'mobile-comments'], true)) {
             $data = array_merge($data, $this->standaloneMobileData($query));
         } elseif ($this->page === 'user') {

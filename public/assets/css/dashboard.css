@@ -6,6 +6,37 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.moderator-account-row[hidden],
+[data-moderator-no-results][hidden] {
+  display: none;
+}
+
+.moderator-search {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  margin: 0 0 16px;
+  font-size: 0.8rem;
+}
+
+.moderator-search input,
+.moderator-remove input,
+.suspension-reason input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #dfe3eb;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.moderator-remove label,
+.suspension-reason {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 0.8rem;
+}
+
 .moderator-actions {
   display: flex;
   align-items: flex-start;

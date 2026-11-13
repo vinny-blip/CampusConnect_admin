@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS admin_users (
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  temp_password_hash VARCHAR(255) NULL,
+  temp_password_expires_at DATETIME NULL,
+  temp_password_sent_at DATETIME NULL,
+  temp_password_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
   role ENUM('admin', 'moderator') NOT NULL DEFAULT 'moderator',
   suspended TINYINT(1) NOT NULL DEFAULT 0,
   suspended_until DATETIME NULL,
@@ -19,6 +23,22 @@ CREATE TABLE IF NOT EXISTS admin_users (
   UNIQUE KEY admin_users_email_unique (email)
 ) ENGINE=InnoDB;
 
+-- Preserves moderation and moderator-account actions even after accounts are removed.
+CREATE TABLE IF NOT EXISTS superadmin_moderation_activity (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  actor_id BIGINT UNSIGNED NOT NULL,
+  actor_role VARCHAR(20) NOT NULL,
+  actor_name VARCHAR(120) NOT NULL,
+  actor_email VARCHAR(254) NOT NULL,
+  action VARCHAR(80) NOT NULL,
+  target_type VARCHAR(40) NOT NULL,
+  target_id BIGINT UNSIGNED NOT NULL,
+  target_label VARCHAR(254) NULL,
+  reason VARCHAR(500) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY moderation_activity_time (created_at, id)
+) ENGINE=InnoDB;
+
 -- Keeps moderator login history even if an account is removed.
 CREATE TABLE IF NOT EXISTS superadmin_moderator_login_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -26,6 +46,7 @@ CREATE TABLE IF NOT EXISTS superadmin_moderator_login_logs (
   moderator_name VARCHAR(120) NOT NULL,
   moderator_email VARCHAR(254) NOT NULL,
   login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_activity_at DATETIME NULL,
   logout_at DATETIME NULL,
   end_reason ENUM('logout', 'suspended', 'removed') NULL,
   PRIMARY KEY (id),
@@ -40,6 +61,10 @@ CREATE TABLE IF NOT EXISTS superadmin_users (
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  temp_password_hash VARCHAR(255) NULL,
+  temp_password_expires_at DATETIME NULL,
+  temp_password_sent_at DATETIME NULL,
+  temp_password_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
   profile_image VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -196,7 +221,7 @@ CREATE TABLE IF NOT EXISTS mobile_comment_reports (
   reporter_user_id INT NOT NULL,
   reason VARCHAR(255) NULL,
   additional_comments TEXT NULL,
-  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  status VARCHAR(50) DEFAULT 'Pending',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY mobile_comment_reports_status (status),
@@ -217,6 +242,16 @@ CREATE TABLE IF NOT EXISTS admin_mobile_user_moderation (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX admin_mobile_user_status (status)
 ) ENGINE=InnoDB;
+
+-- Stores account appeals submitted by users in the mobile application.
+CREATE TABLE IF NOT EXISTS mobile_appeals (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  appeal_message TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY mobile_appeals_user (user_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Sends moderation updates from the dashboard to mobile-app users.
 CREATE TABLE IF NOT EXISTS mobile_notifications (

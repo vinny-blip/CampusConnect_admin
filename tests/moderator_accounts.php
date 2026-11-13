@@ -21,6 +21,26 @@ function expect(bool $condition, string $message): void
     }
 }
 
+function sessionIsActive(ModeratorAccountModel $accounts, int $sessionId): bool
+{
+    foreach ($accounts->recentSessions() as $session) {
+        if ((int)$session['id'] === $sessionId) {
+            return (bool)$session['is_active'];
+        }
+    }
+    throw new RuntimeException('Session was not found in recent logs.');
+}
+
+function sessionState(ModeratorAccountModel $accounts, int $sessionId): string
+{
+    foreach ($accounts->recentSessions() as $session) {
+        if ((int)$session['id'] === $sessionId) {
+            return (string)$session['state'];
+        }
+    }
+    throw new RuntimeException('Session was not found in recent logs.');
+}
+
 $id = random_int(1000000000, 2000000000);
 $email = "moderator-test-{$id}@example.edu";
 $password = 'test-password';
@@ -34,6 +54,14 @@ try {
     $first = $accounts->startSession($id);
     $second = $accounts->startSession($id);
     expect($first !== null && $second !== null && $accounts->sessionActive($first, $id), 'Moderator sessions were not created.');
+    expect(sessionIsActive($accounts, $first), 'A new session should show as signed in.');
+    expect(sessionState($accounts, $first) === 'signed-in', 'A new session should have a signed-in status.');
+    $db->prepare('UPDATE superadmin_moderator_login_logs SET last_activity_at = DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 6 MINUTE) WHERE id = ?')->execute([$first]);
+    expect(!sessionIsActive($accounts, $first), 'An inactive session must not show as signed in.');
+    expect(sessionState($accounts, $first) === 'timed-out', 'An inactive session without a recorded sign-out must show as timed out.');
+    $db->prepare('UPDATE superadmin_moderator_login_logs SET last_activity_at = NULL WHERE id = ?')->execute([$first]);
+    expect(!sessionIsActive($accounts, $first), 'A legacy session without activity must not show as signed in.');
+    expect($accounts->sessionActive($first, $id) && sessionIsActive($accounts, $first), 'Session activity must refresh signed-in status.');
     $future = (new DateTimeImmutable('+1 hour', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
     expect($accounts->setSuspended($id, true, $future), 'Suspension failed.');
     $row = $db->query("SELECT suspended_until FROM admin_users WHERE id = {$id}")->fetch();
@@ -41,6 +69,7 @@ try {
     $accounts->restoreExpiredSuspensions();
     expect($users->login($email, $password, 'moderator') === null, 'Future suspension was restored early.');
     expect(!$accounts->sessionActive($first, $id) && !$accounts->sessionActive($second, $id), 'Suspension must end every session.');
+    expect(!sessionIsActive($accounts, $first), 'A suspended session must not show as signed in.');
     expect($accounts->startSession($id) === null && $users->login($email, $password, 'moderator') === null, 'Suspended moderator can sign in.');
     expect($users->findById($id, 'moderator') === null, 'Suspended account can resolve an existing session.');
     expect($accounts->setSuspended($id, false), 'Restoring the moderator failed.');

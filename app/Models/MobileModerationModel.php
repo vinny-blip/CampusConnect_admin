@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Read-only integration with the mobile application's tables plus admin-owned
+ * Integration with the mobile application's tables plus admin-owned
  * moderation state. Mobile content is never copied into admin_app_state.
  */
 final class MobileModerationModel
@@ -26,6 +26,119 @@ final class MobileModerationModel
             return true;
         } catch (PDOException) {
             return false;
+        }
+    }
+
+    public function adminReportOverview(): array
+    {
+        return [
+            'post_reports' => (int)$this->db->query("SELECT COUNT(*) FROM mobile_reports WHERE LOWER(status) = 'pending'")->fetchColumn(),
+            'comment_reports' => (int)$this->db->query("SELECT COUNT(*) FROM mobile_comment_reports WHERE LOWER(status) = 'pending'")->fetchColumn(),
+            'appeals' => (int)$this->db->query("SELECT COUNT(*) FROM mobile_appeals WHERE LOWER(status) = 'pending'")->fetchColumn(),
+            'pending_posts' => (int)$this->db->query(
+                "SELECT COUNT(*) FROM mobile_posts p LEFT JOIN admin_mobile_post_moderation m ON m.mobile_post_id = p.id
+                 WHERE COALESCE(m.status, 'pending') = 'pending'"
+            )->fetchColumn(),
+        ];
+    }
+
+    public function accountPage(string $search, int $requestedPage): array
+    {
+        $where = '';
+        $params = [];
+        if ($search !== '') {
+            $where = ' WHERE u.full_name LIKE ? OR u.username LIKE ? OR u.institutional_email LIKE ?';
+            $like = '%' . $search . '%';
+            $params = [$like, $like, $like];
+        }
+        $count = $this->db->prepare('SELECT COUNT(*) FROM mobile_users u' . $where);
+        $count->execute($params);
+        $total = (int)$count->fetchColumn();
+        $pages = max(1, (int)ceil($total / 25));
+        $page = min(max(1, $requestedPage), $pages);
+        $offset = ($page - 1) * 25;
+        $statement = $this->db->prepare(
+            'SELECT u.id, u.full_name, u.username, u.institutional_email, u.profile_pic_url, u.created_at,
+                    COALESCE(m.status, "active") AS moderation_status
+             FROM mobile_users u LEFT JOIN admin_mobile_user_moderation m ON m.mobile_user_id = u.id'
+            . $where . " ORDER BY u.created_at DESC, u.id DESC LIMIT 25 OFFSET {$offset}"
+        );
+        $statement->execute($params);
+        return ['accounts' => $statement->fetchAll(), 'total' => $total, 'page' => $page, 'pages' => $pages];
+    }
+
+    public function deleteUserAccount(int $userId): bool
+    {
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
+        try {
+            $user = $this->db->prepare('SELECT institutional_email FROM mobile_users WHERE id = ? FOR UPDATE');
+            $user->execute([$userId]);
+            $email = $user->fetchColumn();
+            if ($email === false) {
+                if ($ownsTransaction) $this->db->rollBack();
+                return false;
+            }
+
+            $queries = [
+                'DELETE r FROM mobile_comment_reports r
+                 LEFT JOIN mobile_comments c ON c.id = r.comment_id
+                 LEFT JOIN mobile_posts p ON p.id = c.post_id
+                 LEFT JOIN admin_removed_mobile_comments a ON a.mobile_comment_id = r.comment_id
+                 WHERE r.reporter_user_id = ? OR c.user_id = ? OR p.user_id = ? OR a.mobile_user_id = ?
+                    OR a.mobile_post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR a.mobile_post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId, $userId, $userId, $userId, $userId],
+                'DELETE m FROM admin_mobile_comment_moderation m
+                 JOIN mobile_comments c ON c.id = m.mobile_comment_id
+                 LEFT JOIN mobile_posts p ON p.id = c.post_id
+                 WHERE c.user_id = ? OR p.user_id = ?' => [$userId, $userId],
+                'DELETE m FROM admin_mobile_comment_moderation m
+                 JOIN admin_removed_mobile_comments a ON a.mobile_comment_id = m.mobile_comment_id
+                 WHERE a.mobile_user_id = ?
+                    OR a.mobile_post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR a.mobile_post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId, $userId],
+                'DELETE FROM admin_removed_mobile_comments
+                 WHERE mobile_user_id = ?
+                    OR mobile_post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR mobile_post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId, $userId],
+                'DELETE FROM mobile_reports WHERE reporter_user_id = ?
+                    OR post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId, $userId],
+                'DELETE FROM mobile_comments WHERE user_id = ?
+                    OR post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)' => [$userId, $userId],
+                'DELETE FROM admin_mobile_post_moderation
+                 WHERE mobile_post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR mobile_post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId],
+                'DELETE FROM mobile_notifications WHERE user_id = ?
+                    OR post_id IN (SELECT id FROM mobile_posts WHERE user_id = ?)
+                    OR post_id IN (SELECT mobile_post_id FROM admin_removed_mobile_posts WHERE mobile_user_id = ?)' => [$userId, $userId, $userId],
+                'DELETE FROM admin_removed_mobile_posts WHERE mobile_user_id = ?' => [$userId],
+                'DELETE FROM mobile_posts WHERE user_id = ?' => [$userId],
+                'DELETE FROM mobile_appeals WHERE user_id = ?' => [$userId],
+                'DELETE FROM admin_mobile_user_moderation WHERE mobile_user_id = ?' => [$userId],
+                'UPDATE admin_mobile_login_logs SET logout_at = CURRENT_TIMESTAMP
+                 WHERE mobile_user_id = ? AND logout_at IS NULL' => [$userId],
+            ];
+            foreach ($queries as $sql => $params) {
+                $this->db->prepare($sql)->execute($params);
+            }
+            $otpTable = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mobile_otps'"
+            )->fetchColumn();
+            if ((int)$otpTable > 0) {
+                $this->db->prepare('DELETE FROM mobile_otps WHERE email = ?')->execute([$email]);
+            }
+            $statement = $this->db->prepare('DELETE FROM mobile_users WHERE id = ?');
+            $statement->execute([$userId]);
+            if ($statement->rowCount() !== 1) {
+                throw new RuntimeException('The mobile account could not be deleted.');
+            }
+            if ($ownsTransaction) $this->db->commit();
+            return true;
+        } catch (Throwable $exception) {
+            if ($ownsTransaction && $this->db->inTransaction()) $this->db->rollBack();
+            throw $exception;
         }
     }
 
@@ -600,10 +713,19 @@ final class MobileModerationModel
         $sql = 'SELECT u.*, COALESCE(m.status, "active") AS moderation_status,
                 m.suspended_until, m.suspension_timezone_offset,
                 COUNT(DISTINCT p.id) posts_count, COUNT(DISTINCT c.id) comments_count,
-                COALESCE(MAX(violations.violation_count), 0) violation_count
+                COALESCE(MAX(violations.violation_count), 0) violation_count,
+                MAX(appeal.appeal_message) appeal_message,
+                MAX(appeal.status) appeal_status,
+                MAX(appeal.created_at) appeal_created_at
                 FROM mobile_users u LEFT JOIN mobile_posts p ON p.user_id = u.id
                 LEFT JOIN mobile_comments c ON c.user_id = u.id
                 LEFT JOIN admin_mobile_user_moderation m ON m.mobile_user_id = u.id
+                LEFT JOIN mobile_appeals appeal ON appeal.user_id = u.id
+                    AND appeal.id = (
+                        SELECT MAX(latest_appeal.id)
+                        FROM mobile_appeals latest_appeal
+                        WHERE latest_appeal.user_id = u.id
+                    )
                 LEFT JOIN (
                     SELECT flagged.user_id, COUNT(*) AS violation_count
                     FROM (
@@ -740,7 +862,8 @@ final class MobileModerationModel
             return false;
         }
 
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $names = array_keys($row);
             $insert = $this->db->prepare(
@@ -764,10 +887,10 @@ final class MobileModerationModel
                 'Your post "' . (string)$archived['title'] . '" has been restored.',
                 (int)$row['id'],
             ]);
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return true;
         } catch (Throwable $exception) {
-            $this->db->rollBack();
+            if ($ownsTransaction && $this->db->inTransaction()) $this->db->rollBack();
             throw $exception;
         }
     }
@@ -795,7 +918,8 @@ final class MobileModerationModel
         $rawStatement->execute([$id]);
         $rawPost = $rawStatement->fetch() ?: [];
 
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $archive = $this->db->prepare(
                 'INSERT INTO admin_removed_mobile_posts
@@ -832,10 +956,10 @@ final class MobileModerationModel
             ]);
             $delete = $this->db->prepare('DELETE FROM mobile_posts WHERE id = ? AND user_id = ?');
             $delete->execute([$id, (int)$post['user_id']]);
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return $delete->rowCount() > 0;
         } catch (Throwable $exception) {
-            $this->db->rollBack();
+            if ($ownsTransaction && $this->db->inTransaction()) $this->db->rollBack();
             throw $exception;
         }
     }
@@ -889,7 +1013,8 @@ final class MobileModerationModel
             return false;
         }
 
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $names = array_keys($row);
             $this->db->prepare(
@@ -906,10 +1031,10 @@ final class MobileModerationModel
                 'Your comment on "' . (string)($archived['post_title'] ?? 'a post') . '" has been restored.',
                 (int)$row['post_id'],
             ]);
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return true;
         } catch (Throwable $exception) {
-            $this->db->rollBack();
+            if ($ownsTransaction && $this->db->inTransaction()) $this->db->rollBack();
             throw $exception;
         }
     }
@@ -937,7 +1062,8 @@ final class MobileModerationModel
         $rawStatement->execute([$id]);
         $rawComment = $rawStatement->fetch() ?: [];
 
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $this->db->prepare(
                 'INSERT INTO admin_removed_mobile_comments
@@ -989,10 +1115,10 @@ final class MobileModerationModel
             $delete = $this->db->prepare('DELETE FROM mobile_comments WHERE id = ?');
             $delete->execute([$id]);
 
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return $delete->rowCount() > 0;
         } catch (Throwable $exception) {
-            $this->db->rollBack();
+            if ($ownsTransaction && $this->db->inTransaction()) $this->db->rollBack();
             throw $exception;
         }
     }

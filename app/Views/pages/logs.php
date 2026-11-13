@@ -21,7 +21,11 @@
         <th>Status</th>
       </tr>
     </thead>
-    <tbody data-login-log-rows>
+    <tbody
+      data-login-log-rows
+      data-session-page="<?= (int)$sessionPage ?>"
+      data-session-pages="<?= (int)$sessionPageCount ?>"
+    >
       <!-- Show each mobile session and use an estimate when explicit logout is missing. -->
       <?php foreach ($loginSessions as $session): ?>
         <?php
@@ -52,4 +56,15 @@
     </tbody>
   </table>
 </div>
+<?php if ($sessionPageCount > 1): ?>
+  <nav class="login-log-pagination" aria-label="Mobile login log pages">
+    <?php if ($sessionPage > 1): ?>
+      <a href="logs.php?page=<?= (int)($sessionPage - 1) ?>">Previous</a>
+    <?php endif; ?>
+    <span>Page <?= (int)$sessionPage ?> of <?= (int)$sessionPageCount ?></span>
+    <?php if ($sessionPage < $sessionPageCount): ?>
+      <a href="logs.php?page=<?= (int)($sessionPage + 1) ?>">Next</a>
+    <?php endif; ?>
+  </nav>
+<?php endif; ?>
 <p class="login-log-note">A logout time marked with “~” is estimated from the last mobile-app activity after 5 minutes without a heartbeat. Explicit app logouts are recorded exactly. Mobile users need the updated app and backend deployed for their sessions to be tracked.</p>

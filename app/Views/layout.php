@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="assets/css/moderation.css?v=<?= (int)filemtime(dirname(__DIR__, 2) . '/public/assets/css/moderation.css') ?>">
   <link rel="stylesheet" href="assets/css/dashboard.css?v=<?= (int)filemtime(dirname(__DIR__, 2) . '/public/assets/css/dashboard.css') ?>">
 </head>
-<body class="dash">
+<body class="dash"<?= ($user['role'] ?? '') === 'moderator' ? ' data-moderator-heartbeat' : '' ?>>
 <div id="app">
   <div class="shell">
     <header class="topbar">
@@ -33,12 +33,14 @@
     </header>
     <div class="body">
       <nav class="sidebar" aria-label="Main">
-        <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span>Overview</a>
+        <a class="<?= $page === 'home' ? 'on' : '' ?>" href="home.php"><span class="ico"><?= icon_svg('home') ?></span><?= ($user['role'] ?? '') === 'admin' ? 'Moderator Accounts' : 'Overview' ?></a>
         <?php if (($user['role'] ?? '') === 'admin'): ?>
         <a class="<?= $page === 'logs' ? 'on' : '' ?>" href="logs.php"><span class="ico"><?= icon_svg('history') ?></span>Moderator Logs</a>
-        <a class="<?= $page === 'restricted' ? 'on' : '' ?>" href="restricted.php"><span class="ico"><?= icon_svg('users') ?></span>Restrictions</a>
+        <a class="<?= $page === 'moderator-activity' ? 'on' : '' ?>" href="moderator-activity.php"><span class="ico"><?= icon_svg('history') ?></span>Moderator Activity</a>
+        <a class="<?= $page === 'reports-overview' ? 'on' : '' ?>" href="reports-overview.php"><span class="ico"><?= icon_svg('sliders') ?></span>Reports Overview</a>
+        <a class="<?= $page === 'user-accounts' ? 'on' : '' ?>" href="user-accounts.php"><span class="ico"><?= icon_svg('users') ?></span>User Accounts</a>
         <?php else: ?>
-        <a class="<?= in_array($page, ['control', 'posts', 'comments', 'reported', 'removed', 'dismissed', 'post', 'restricted'], true) ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Feed</a>
+        <a class="<?= in_array($page, ['control', 'posts', 'comments', 'reported', 'removed', 'dismissed', 'post'], true) ? 'on' : '' ?>" href="control.php"><span class="ico"><?= icon_svg('sliders') ?></span>Control Feed</a>
         <a class="<?= $page === 'users' || $page === 'user' ? 'on' : '' ?>" href="users.php"><span class="ico"><?= icon_svg('users') ?></span>Users</a>
         <a class="<?= $page === 'logs' ? 'on' : '' ?>" href="logs.php"><span class="ico"><?= icon_svg('history') ?></span>Logs</a>
         <?php endif; ?>
@@ -52,17 +54,16 @@
         <?php
           $tabPages = [
               'posts' => 'Posts', 'comments' => 'Comments',
-              'restricted' => 'Restricted', 'reported' => 'Reported', 'removed' => 'Removed',
+              'reported' => 'Reported', 'removed' => 'Removed',
               'dismissed' => 'Dismissed',
           ];
           $shortPages = ['post' => 'Posts'];
           $tabSet = ($user['role'] ?? '') !== 'admin'
-              && in_array($page, ['posts', 'comments', 'restricted', 'reported', 'removed', 'dismissed', 'control', 'post'], true);
+              && in_array($page, ['posts', 'comments', 'reported', 'removed', 'dismissed', 'control', 'post'], true);
           if ($tabSet):
         ?>
           <nav class="tabs" aria-label="Moderation">
             <?php foreach ($tabPages as $tabPage => $tabLabel): ?>
-              <?php if ($tabPage === 'restricted' && ($user['role'] ?? '') !== 'admin') continue; ?>
               <?php if ($page === 'control' && !in_array($tabPage, ['posts', 'comments', 'reported', 'removed', 'dismissed'], true)) continue; ?>
               <?php if ($page === 'post' && !in_array($tabPage, ['posts', 'reported', 'removed', 'dismissed'], true)) continue; ?>
               <a href="<?= h($tabPage) ?>.php" class="<?= ($page === $tabPage || (in_array($page, ['post', 'control'], true) && $tabPage === 'posts')) ? 'on' : '' ?>"><?= h($tabLabel) ?></a>
@@ -79,12 +80,60 @@
 </div>
 <script>
   (() => {
+    if (document.body.hasAttribute('data-moderator-heartbeat')) {
+      const sendModeratorHeartbeat = async () => {
+        if (document.visibilityState !== 'visible') return;
+        try {
+          const response = await fetch('home.php?moderator_heartbeat=1', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+          if (!response.ok || !(await response.json()).ok) throw new Error('Moderator activity check failed.');
+        } catch (error) {
+          console.error('Unable to record moderator activity.', error);
+        }
+      };
+      document.addEventListener('visibilitychange', sendModeratorHeartbeat);
+      window.setInterval(sendModeratorHeartbeat, 60000);
+      sendModeratorHeartbeat();
+    }
+
+    if (document.querySelector('[data-moderator-log-rows]')) {
+      const refreshModeratorLogs = async () => {
+        if (document.visibilityState !== 'visible') return;
+        try {
+          const response = await fetch('logs.php?moderator_poll=1', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error(`Moderator log check failed (${response.status}).`);
+          const data = await response.json();
+          if (!Array.isArray(data.sessions)) throw new Error('Moderator log check returned invalid data.');
+          const rows = document.querySelectorAll('[data-moderator-log-id]');
+          const states = new Map(data.sessions.map((session) => [String(session.id), session.state]));
+          if (rows.length !== states.size || Array.from(rows).some((row) =>
+            !states.has(row.dataset.moderatorLogId)
+            || states.get(row.dataset.moderatorLogId) !== row.dataset.moderatorLogState
+          )) window.location.reload();
+        } catch (error) {
+          console.error('Unable to refresh moderator logs.', error);
+        }
+      };
+      document.addEventListener('visibilitychange', refreshModeratorLogs);
+      window.setInterval(refreshModeratorLogs, 30000);
+      refreshModeratorLogs();
+    }
+
     const activeUsers = document.querySelector('[data-active-user-count]');
     // Refresh the Logs count and rows while the page is visible.
     const updateActiveUsers = async () => {
       if (!activeUsers || document.visibilityState !== 'visible') return;
       try {
-        const response = await fetch('logs.php?poll=1', {
+        const rows = document.querySelector('[data-login-log-rows]');
+        const currentPage = rows ? (Number(rows.dataset.sessionPage) || 1) : 1;
+        const response = await fetch(`logs.php?poll=1&page=${currentPage}`, {
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
         });
@@ -93,8 +142,12 @@
         if (Number.isInteger(data.active_users) && data.active_users >= 0) {
           activeUsers.textContent = String(data.active_users);
         }
-        const rows = document.querySelector('[data-login-log-rows]');
         if (rows && Array.isArray(data.sessions)) {
+          if (data.current_page !== currentPage
+            || data.total_pages !== Number(rows.dataset.sessionPages)) {
+            window.location.reload();
+            return;
+          }
           rows.replaceChildren();
           if (data.sessions.length === 0) {
             const row = document.createElement('tr');
@@ -189,8 +242,45 @@
       refreshExpiredSuspensions();
     }
 
+    const appealDialog = document.querySelector('[data-appeal-dialog]');
+    if (appealDialog) {
+      const appealUserDetails = appealDialog.querySelector('[data-appeal-user-details]');
+      const appealMeta = appealDialog.querySelector('[data-appeal-meta]');
+      const appealStatus = appealDialog.querySelector('[data-appeal-status]');
+      const appealCreatedAt = appealDialog.querySelector('[data-appeal-created-at]');
+      const appealMessage = appealDialog.querySelector('[data-appeal-message]');
+      document.addEventListener('click', (event) => {
+        const openButton = event.target.closest('[data-open-appeal]');
+        if (openButton) {
+          appealUserDetails.textContent = `${openButton.dataset.appealUser || 'Mobile user'} · ${openButton.dataset.appealEmail || ''}`;
+          appealStatus.textContent = openButton.dataset.appealStatus || '';
+          appealCreatedAt.textContent = openButton.dataset.appealCreatedAt || '';
+          appealMeta.hidden = !openButton.dataset.appealStatus && !openButton.dataset.appealCreatedAt;
+          appealMessage.textContent = openButton.dataset.appealMessage || 'This user has not submitted an appeal yet.';
+          appealDialog.showModal();
+          return;
+        }
+        if (event.target.closest('[data-close-appeal]')) appealDialog.close();
+      });
+      appealDialog.addEventListener('click', (event) => {
+        if (event.target === appealDialog) appealDialog.close();
+      });
+    }
+
     const moderatorAccountsPage = document.querySelector('[data-moderator-accounts-page]');
     if (moderatorAccountsPage) {
+      const moderatorSearch = document.querySelector('[data-moderator-search]');
+      const filterModeratorAccounts = () => {
+        const search = moderatorSearch.value.trim().toLocaleLowerCase();
+        let visible = 0;
+        document.querySelectorAll('[data-moderator-row]').forEach((row) => {
+          const matches = row.dataset.search.toLocaleLowerCase().includes(search);
+          row.hidden = !matches;
+          if (matches) visible++;
+        });
+        document.querySelector('[data-moderator-no-results]').hidden = visible !== 0 || search === '';
+      };
+      moderatorSearch.addEventListener('input', filterModeratorAccounts);
       const refreshModeratorAccounts = async () => {
         if (document.visibilityState !== 'visible') return;
         try {
@@ -321,6 +411,8 @@
         const openButton = event.target.closest('[data-open-suspension]');
         if (openButton) {
           suspensionUserId.value = openButton.dataset.userId || '';
+          const suspensionReason = suspensionDialog.querySelector('[name="reason"]');
+          if (suspensionReason) suspensionReason.value = '';
           selectedDate = '';
           suspensionValue.value = '';
           suspensionTimezone.value = '';

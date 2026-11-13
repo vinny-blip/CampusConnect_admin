@@ -64,6 +64,50 @@ try {
     expect($users->login($email, 'replacement-password', 'admin') !== null, 'Admin replacement password failed.');
     expect($users->login($email, $moderatorPassword, 'moderator') !== null, 'Moderator password was changed.');
 
+    $temporaryPassword = '418207';
+    $db->prepare(
+        'UPDATE superadmin_users
+         SET temp_password_hash = ?, temp_password_expires_at = ?, temp_password_attempts = 0
+         WHERE id = ?'
+    )->execute([
+        password_hash($temporaryPassword, PASSWORD_DEFAULT),
+        gmdate('Y-m-d H:i:s', time() + 1800),
+        $id,
+    ]);
+    $temporaryLogin = $users->login($email, $temporaryPassword, 'admin');
+    expect(($temporaryLogin['temporary_password_login'] ?? false) === true, 'An unexpired admin temporary password was not accepted.');
+    expect(!array_key_exists('temp_password_hash', $temporaryLogin), 'Temporary password data was exposed in the login result.');
+    expect($users->changePassword($id, $temporaryPassword, 'recovered-admin-password', 'admin'), 'Temporary password could not be used to change the admin password.');
+    expect($users->login($email, $temporaryPassword, 'admin') === null, 'A temporary password remained valid after being replaced.');
+    expect($users->login($email, 'recovered-admin-password', 'admin') !== null, 'The password changed using a temporary password did not work.');
+
+    $expiredTemporaryPassword = '782051';
+    $db->prepare(
+        'UPDATE admin_users
+         SET temp_password_hash = ?, temp_password_expires_at = ?, temp_password_attempts = 0
+         WHERE id = ?'
+    )->execute([
+        password_hash($expiredTemporaryPassword, PASSWORD_DEFAULT),
+        gmdate('Y-m-d H:i:s', time() - 60),
+        $id,
+    ]);
+    expect($users->login($email, $expiredTemporaryPassword, 'moderator') === null, 'An expired moderator temporary password was accepted.');
+
+    $lockedTemporaryPassword = '125790';
+    $db->prepare(
+        'UPDATE admin_users
+         SET temp_password_hash = ?, temp_password_expires_at = ?, temp_password_attempts = 0
+         WHERE id = ?'
+    )->execute([
+        password_hash($lockedTemporaryPassword, PASSWORD_DEFAULT),
+        gmdate('Y-m-d H:i:s', time() + 1800),
+        $id,
+    ]);
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $users->login($email, 'incorrect-password-' . $attempt, 'moderator');
+    }
+    expect($users->login($email, $lockedTemporaryPassword, 'moderator') === null, 'The temporary password was not locked after five failed attempts.');
+
     $studentState = new TestState($db, $id, 'moderator');
     $adminState = new TestState($db, $id, 'admin');
     $studentState->put('student');

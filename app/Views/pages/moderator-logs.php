@@ -5,18 +5,30 @@
 <div class="login-log-table-wrap">
   <table class="login-log-table">
     <thead><tr><th>Moderator</th><th>Email</th><th>Logged in</th><th>Ended</th><th>Status</th></tr></thead>
-    <tbody>
+    <tbody data-moderator-log-rows>
       <?php foreach ($moderatorSessions as $session): ?>
-        <tr>
+        <?php
+          $state = $session['state'];
+          $statusClass = match ($state) {
+              'signed-in' => 'active',
+              'timed-out' => 'timed-out',
+              default => 'logged-out',
+          };
+          $endedAt = $session['logout_at']
+              ?: ($state === 'timed-out' ? '~' . $session['estimated_logout_at'] : 'Not recorded');
+        ?>
+        <tr data-moderator-log-id="<?= (int)$session['id'] ?>" data-moderator-log-state="<?= h($state) ?>">
           <td><?= h($session['moderator_name']) ?></td>
           <td><?= h($session['moderator_email']) ?></td>
           <td><?= h($session['login_at']) ?></td>
-          <td><?= h($session['logout_at'] ?: 'Not recorded') ?></td>
-          <td><span class="login-log-status <?= $session['end_reason'] === null ? 'inactive' : 'logged-out' ?>"><?= h(match ($session['end_reason']) {
+          <td><?= h($endedAt) ?></td>
+          <td><span class="login-log-status <?= h($statusClass) ?>"><?= h(match ($state) {
+              'signed-in' => 'Signed in',
               'logout' => 'Logged out',
               'suspended' => 'Account suspended',
               'removed' => 'Account removed',
-              default => 'No sign-out recorded',
+              'timed-out' => 'Timed out',
+              default => 'Timed out',
           }) ?></span></td>
         </tr>
       <?php endforeach; ?>
@@ -26,4 +38,4 @@
     </tbody>
   </table>
 </div>
-<p class="login-log-note">Sessions are recorded after this feature is deployed. Closing a browser may not record a sign-out.</p>
+<p class="login-log-note">Sessions without a recorded sign-out are marked timed out after 5 minutes of inactivity; the end time is estimated.</p>

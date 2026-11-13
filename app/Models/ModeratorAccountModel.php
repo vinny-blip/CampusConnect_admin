@@ -11,8 +11,10 @@ final class ModeratorAccountModel
     {
         $this->restoreExpiredSuspensions();
         return $this->db->query(
-            "SELECT id, name, email, profile_image, suspended, suspended_until, created_at FROM admin_users
-             WHERE role = 'moderator' ORDER BY name, id"
+            "SELECT u.id, u.name, u.email, u.profile_image, u.suspended, u.suspended_until, u.created_at,
+                    (SELECT MAX(COALESCE(l.last_activity_at, l.login_at))
+                     FROM superadmin_moderator_login_logs l WHERE l.moderator_id = u.id) AS last_activity_at
+             FROM admin_users u WHERE u.role = 'moderator' ORDER BY u.name, u.id"
         )->fetchAll();
     }
 
@@ -27,10 +29,19 @@ final class ModeratorAccountModel
 
     public function recentSessions(): array
     {
-        return $this->db->query(
-            'SELECT moderator_name, moderator_email, login_at, logout_at, end_reason
+        $sessions = $this->db->query(
+            'SELECT id, moderator_name, moderator_email, login_at, last_activity_at, logout_at, end_reason,
+                    DATE_ADD(COALESCE(last_activity_at, login_at), INTERVAL 5 MINUTE) AS estimated_logout_at,
+                    (logout_at IS NULL AND last_activity_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE)) AS is_active
              FROM superadmin_moderator_login_logs ORDER BY login_at DESC, id DESC LIMIT 500'
         )->fetchAll();
+        foreach ($sessions as &$session) {
+            $session['is_active'] = (bool)$session['is_active'];
+            $session['state'] = $session['end_reason']
+                ?? ($session['is_active'] ? 'signed-in' : 'timed-out');
+        }
+        unset($session);
+        return $sessions;
     }
 
     public function startSession(int $moderatorId): ?int
@@ -47,7 +58,8 @@ final class ModeratorAccountModel
                 return null;
             }
             $this->db->prepare(
-                'INSERT INTO superadmin_moderator_login_logs (moderator_id, moderator_name, moderator_email) VALUES (?, ?, ?)'
+                'INSERT INTO superadmin_moderator_login_logs (moderator_id, moderator_name, moderator_email, last_activity_at)
+                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
             )->execute([$moderatorId, $moderator['name'], $moderator['email']]);
             $sessionId = (int)$this->db->lastInsertId();
             $this->db->commit();
@@ -66,7 +78,14 @@ final class ModeratorAccountModel
             'SELECT 1 FROM superadmin_moderator_login_logs WHERE id = ? AND moderator_id = ? AND logout_at IS NULL'
         );
         $statement->execute([$sessionId, $moderatorId]);
-        return $statement->fetchColumn() !== false;
+        if ($statement->fetchColumn() === false) {
+            return false;
+        }
+        $this->db->prepare(
+            'UPDATE superadmin_moderator_login_logs SET last_activity_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND moderator_id = ? AND logout_at IS NULL'
+        )->execute([$sessionId, $moderatorId]);
+        return true;
     }
 
     public function endSession(int $sessionId, int $moderatorId): void
@@ -82,7 +101,8 @@ final class ModeratorAccountModel
         if ($suspended && $suspendedUntil === null) {
             throw new InvalidArgumentException('A suspension end time is required.');
         }
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $statement = $this->db->prepare(
                 "UPDATE admin_users SET suspended = ?, suspended_until = ?
@@ -94,10 +114,10 @@ final class ModeratorAccountModel
             if ($changed && $suspended) {
                 $this->closeSessions($moderatorId, 'suspended');
             }
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return $changed;
         } catch (Throwable $exception) {
-            if ($this->db->inTransaction()) {
+            if ($ownsTransaction && $this->db->inTransaction()) {
                 $this->db->rollBack();
             }
             throw $exception;
@@ -106,20 +126,21 @@ final class ModeratorAccountModel
 
     public function remove(int $moderatorId): bool
     {
-        $this->db->beginTransaction();
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) $this->db->beginTransaction();
         try {
             $statement = $this->db->prepare("SELECT id FROM admin_users WHERE id = ? AND role = 'moderator' FOR UPDATE");
             $statement->execute([$moderatorId]);
             if ($statement->fetchColumn() === false) {
-                $this->db->rollBack();
+                if ($ownsTransaction) $this->db->rollBack();
                 return false;
             }
             $this->closeSessions($moderatorId, 'removed');
             $this->db->prepare("DELETE FROM admin_users WHERE id = ? AND role = 'moderator'")->execute([$moderatorId]);
-            $this->db->commit();
+            if ($ownsTransaction) $this->db->commit();
             return true;
         } catch (Throwable $exception) {
-            if ($this->db->inTransaction()) {
+            if ($ownsTransaction && $this->db->inTransaction()) {
                 $this->db->rollBack();
             }
             throw $exception;

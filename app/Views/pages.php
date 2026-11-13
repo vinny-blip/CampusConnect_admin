@@ -20,6 +20,15 @@ switch ($page):
             ? __DIR__ . '/pages/moderator-logs.php'
             : __DIR__ . '/pages/logs.php';
         break;
+    case 'moderator-activity':
+        require __DIR__ . '/pages/moderator-activity.php';
+        break;
+    case 'reports-overview':
+        require __DIR__ . '/pages/reports-overview.php';
+        break;
+    case 'user-accounts':
+        require __DIR__ . '/pages/user-accounts.php';
+        break;
     case 'user':
         require __DIR__ . '/pages/user-activity.php';
         break;
@@ -37,9 +46,6 @@ switch ($page):
         break;
     case 'profile':
         require __DIR__ . '/pages/profile.php';
-        break;
-    case 'restricted':
-        require __DIR__ . '/pages/restricted.php';
         break;
     case 'about':
         require __DIR__ . '/pages/about.php';
